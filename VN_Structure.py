@@ -137,6 +137,7 @@ def write_structure(db, prev=None):
     # ( ([], [], []) , ([], [], []) , ([], [], []) )
     dirs = (([], [], []), ([], [], []), ([], [], []))
     dels = []
+    multirelease_edits = ([], [])
 
     def mk_dir(dir, sym=None):
         to_mk = dir.split(os.sep)
@@ -309,6 +310,8 @@ def write_structure(db, prev=None):
                 if dirs[2][2][i] != dirs[1][2][i] or dirs[2][1][i] != dirs[1][1][i]:
                     mv_dir(dirs[1][1][i], dirs[2][1][i], src_sym=dirs[1][2][i], dst_sym=dirs[2][2][i])
                     count[1] += 1
+                    multirelease_edits[0].append(dirs[1][1][i])
+                    multirelease_edits[1].append(dirs[2][1][i])
             else:
                 if not os.path.exists(dirs[2][2][i]):
                     mk_dir(dirs[2][1][i], sym=dirs[2][2][i])
@@ -373,6 +376,8 @@ def write_structure(db, prev=None):
                         if flag:
                             mv_dir(dirs[1][1][i], dirs[2][1][i], src_sym=dirs[1][2][i], dst_sym=dirs[2][2][i])
                             count[1] += 1
+                            multirelease_edits[0].append(dirs[1][1][i])
+                            multirelease_edits[1].append(dirs[2][1][i])
                         else:
                             padding = ' ' * (len(str(sum(counter)))+3)
                             print(f'{sum(counter)})  {dirs[1][2][i]}\n{padding}  ln {dirs[1][1][i]}\n{padding} mv {dirs[2][2][i]}\n{padding}  ln {dirs[2][1][i]}')
@@ -415,11 +420,13 @@ def write_structure(db, prev=None):
             if flag:
                 break
             else:
-                if input(f'Execute {counter[0]} creations and {counter[1]} edits and {counter[2]} deletions?\n>'):
+                nl = '\n'
+                if input(f'Execute {counter[0]} creations and {counter[1]} edits and {counter[2]} deletions?\nMultirelease edits:\n{nl.join([" -> ".join(x) for x in zip(multirelease_edits[0], multirelease_edits[1])])}\n>'):
                     flag = True
                 else:
                     break
-    print(f'Created {count[0]} and edited {count[1]} and deleted {count[2]}!')
+    nl = '\n'
+    print(f'Created {count[0]} and edited {count[1]} and deleted {count[2]}!\nPlease check these for any dead links:\n{nl.join([" -> ".join(x) for x in zip(multirelease_edits[0], multirelease_edits[1])])}')
 
 
 ls = natsort.natsorted(filter(lambda x: 'my superior ulist' in x and 'json' in x, next(os.walk('.'))[2]))
