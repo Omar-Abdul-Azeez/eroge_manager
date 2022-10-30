@@ -1,11 +1,15 @@
 # -*- encoding:utf-8 -*-
 import os
 import operator
+import platform
 import shutil
 from functools import reduce
 import natsort
 import json
+from PIL import Image, ImageOps
+import cfscrape
 
+# EXTRAS = ['イラスト', 'レーベル', 'ジャケット', 'マニュアル', 'アイコン', 'ヘッダー', 'あざらしWalker']
 # quotes
 dquotes = [('「', '」'), ('『', '』'), ('“', '”')]
 # special edits
@@ -70,7 +74,7 @@ def special_release_edit(n, id):
 def create_structure(db):
     i = 0
     while i < len(db):
-        if not db[i]['rid'] or not (db[i]['status'] == 'pending' or db[i]['status'] == 'obtained'):
+        if not db[i]['rid'] or not (db[i]['status'] == '#pending#' or db[i]['status'] == 'obtained'):
             del db[i]
             continue
         if db[i]['title_v'] != special_game_edit(db[i]['title_v'], db[i]['vid']):
@@ -132,13 +136,68 @@ def create_structure(db):
         i += 1
 
 
-def write_structure(db, prev=None):
+def write_structure(db, icons, prev_db=None, local_dump=None):
     #   mk,ln(src,dst) rename src     rename dst
     # ( ([], [], []) , ([], [], []) , ([], [], []) )
-    dirs = (([], [], []), ([], [], []), ([], [], []))
+    dirs = (([], [], []), ([], [], []), ([], [], []), [])
     dels = []
     multirelease_edits = ([], [])
 
+    def mk_cover(game, cv):
+        path = f'{game}{os.sep}'
+        if local_dump:
+            if os.path.exists(f'{path}{game}.jpg'):
+                os.remove(f'{path}{game}.jpg')
+            shutil.copyfile(f'{local_dump}{os.sep}{cv[-2:]}{os.sep}{cv[2:]}.jpg', f'{path}{game}.jpg')
+        else:
+            url = f'https://s2.vndb.org/cv/{cv[-2:]}/{cv[2:]}.jpg'
+            cv_img = cfscrape.create_scraper().get(url)
+            cv_img.decode_content = True
+            if os.path.exists(f'{path}{game}.jpg'):
+                os.remove(f'{path}{game}.jpg')
+            with open(f'{path}{game}.jpg', 'wb') as f:
+                f.write(cv_img.content)
+        img = Image.open(f'{path}{game}.jpg').convert('RGBA')
+        hsz = 256
+        perc = (hsz/float(img.size[1]))
+        wsz = int((float(img.size[0])*float(perc)))
+        img = img.resize((wsz, hsz), Image.LANCZOS)
+        bg = hsz if hsz > wsz else wsz
+        nw = Image.new('RGBA', (bg,bg), (0, 0, 0, 0))
+        offset = (int(round(((bg-wsz) / 2), 0)), int(round(((bg-hsz) / 2), 0)))
+        nw.paste(img, offset)
+        if os.path.exists(f'{path}{cv}.ico'):
+            os.remove(f'{path}{cv}.ico')
+        nw.save(f'{path}{cv}.ico')
+        img.close()
+        nw.close()
+        if os.path.exists(f'{path}desktop.ini'):
+            os.remove(f'{path}desktop.ini')
+        if platform.system() == 'Windows':
+            try:
+                with open(f'{path}desktop.ini', 'w', encoding='ANSI') as f:
+                    f.write('[.ShellClassInfo]\nConfirmFileOp=0\n')
+                    f.write(f'IconResource={cv}.ico,0')
+                    f.write(f'\nIconFile={cv}.ico\nIconIndex=0')
+            except UnicodeEncodeError as e:
+                with open(f'{game}{os.sep}desktop.ini', 'w', encoding='utf-8') as f:
+                    f.write('[.ShellClassInfo]\nConfirmFileOp=0\n')
+                    f.write(f'IconResource={cv}.ico,0')
+                    f.write(f'\nIconFile={cv}.ico\nIconIndex=0')
+            os.system(f'attrib +r "{game}"')
+            os.system(f'attrib +h "{path}desktop.ini"')
+            os.system(f'attrib +h "{path}{cv}.ico"')
+        elif platform.system() == 'Linux':
+            try:
+                with open(f'{game}{os.sep}desktop.ini', 'w+', encoding='iso_8859_1') as f:
+                    f.write('[.ShellClassInfo]\nConfirmFileOp=0\n')
+                    f.write(f'IconResource={cv}.ico,0')
+                    f.write(f'\nIconFile={cv}.ico\nIconIndex=0')
+            except UnicodeEncodeError as e:
+                with open(f'{game}{os.sep}desktop.ini', 'w', encoding='utf-8') as f:
+                    f.write('[.ShellClassInfo]\nConfirmFileOp=0\n')
+                    f.write(f'IconResource={cv}.ico,0')
+                    f.write(f'\nIconFile={cv}.ico\nIconIndex=0')
     def mk_dir(dir, sym=None):
         to_mk = dir.split(os.sep)
         to_mk = [os.path.join(*(to_mk[:i + 1])) for i in range(len(to_mk))]
@@ -203,20 +262,20 @@ def write_structure(db, prev=None):
                     os.rmdir(d)
             os.symlink(os.path.relpath(dst, os.path.dirname(dst_sym)), dst_sym, target_is_directory=True)
     def rm_dir(dir):
-        if '/' not in dir:
+        if os.sep not in dir:
             ls = next(os.walk(dir))
-            if ls[1] == 1 and ls[2] == 0:
-                mv_dir(dir, f'Deleted/{dir}')
+            if len(set(ls[1]) - {'Extras'}) == 0 and len(set(ls[2]) - {'desktop.ico', f'{dir}.ico', f'{dir}.jpg'}) == 0:
+                mv_dir(dir, f'Deleted{os.sep}{dir}')
         else:
-            mv_dir(dir, f'Deleted/{dir}')
+            mv_dir(dir, f'Deleted{os.sep}{dir}')
 
     for d in db:
-        if prev:
-            ind = [i for i in range(len(prev)) if prev[i]['vid'] == d['vid'] and prev[i]['rid'] == d['rid']]
+        if prev_db:
+            ind = [i for i in range(len(prev_db)) if prev_db[i]['vid'] == d['vid'] and prev_db[i]['rid'] == d['rid']]
             if len(ind) == 0:
                 d_old = None
             else:
-                d_old = prev.pop(ind[0])
+                d_old = prev_db.pop(ind[0])
         else:
             d_old = None
         if not d_old or (d['patch'] == d_old['patch'] and d['lang'] == d_old['lang'] and
@@ -224,19 +283,21 @@ def write_structure(db, prev=None):
                          d['platform'] == d_old['platform'] and d['multirelease'] == d_old['multirelease']):
             if d['title_v'] not in dirs[0][0]:
                 dirs[0][0].append(d['title_v'])
-                dirs[0][0].append(f"{d['title_v']}/Extras")
+                if icons:
+                    dirs[3].append((d['title_v'], d['cv']))
+                dirs[0][0].append(os.sep.join((d['title_v'], 'Extras')))
             if d['multirelease']:
                 if d['patch']:
-                    dirs[0][1].append(f"Shared releases/Patches/{d['lang']}/{d['platform']}/{d['title_r']}")
-                    dirs[0][2].append(f"{d['title_v']}/Patches/{d['lang']}/{d['platform']}/{d['title_r']}")
+                    dirs[0][1].append(os.sep.join(('Shared releases', 'Patches', d['lang'], d['platform'], d['title_r'])))
+                    dirs[0][2].append(os.sep.join((d['title_v'], 'Patches', d['lang'], d['platform'], d['title_r'])))
                 else:
-                    dirs[0][1].append(f"Shared releases/{d['lang']}/{d['platform']}/{d['title_r']}")
-                    dirs[0][2].append(f"{d['title_v']}/{d['lang']}/{d['platform']}/{d['title_r']}")
+                    dirs[0][1].append(os.sep.join(('Shared releases', d['lang'], d['platform'], d['title_r'])))
+                    dirs[0][2].append(os.sep.join((d['title_v'], d['lang'], d['platform'], d['title_r'])))
             else:
                 if d['patch']:
-                    dirs[0][0].append(f"{d['title_v']}/Patches/{d['lang']}/{d['platform']}/{d['title_r']}")
+                    dirs[0][0].append(os.sep.join((d['title_v'], 'Patches', d['lang'], d['platform'], d['title_r'])))
                 else:
-                    dirs[0][0].append(f"{d['title_v']}/{d['lang']}/{d['platform']}/{d['title_r']}")
+                    dirs[0][0].append(os.sep.join((d['title_v'], d['lang'], d['platform'], d['title_r'])))
         else:
             if d['multirelease'] != d_old['multirelease']:
                 print(f"Can't handle edit of {d_old['title_v']}/{d_old['title_r']} to {d['title_v']}/{d['title_r']} with different multirelease flags!")
@@ -244,40 +305,42 @@ def write_structure(db, prev=None):
             if d['title_v'] not in dirs[2][0]:
                 dirs[1][0].append(d_old['title_v'])
                 dirs[2][0].append(d['title_v'])
-                dirs[1][0].append(f"{d_old['title_v']}/Extras")
-                dirs[2][0].append(f"{d['title_v']}/Extras")
+                if icons and (d['cv'] != d_old['cv'] or d['title_v'] != d_old['title_v']):
+                    dirs[3].append((d['title_v'], d['cv']))
+                dirs[1][0].append(os.sep.join((d_old['title_v'], 'Extras')))
+                dirs[2][0].append(os.sep.join((d['title_v'], 'Extras')))
             if d['multirelease']:
                 if d['patch']:
-                    dirs[1][1].append(f"Shared releases/Patches/{d_old['lang']}/{d_old['platform']}/{d_old['title_r']}")
-                    dirs[2][1].append(f"Shared releases/Patches/{d['lang']}/{d['platform']}/{d['title_r']}")
-                    dirs[1][2].append(f"{d_old['title_v']}/Patches/{d_old['lang']}/{d_old['platform']}/{d_old['title_r']}")
-                    dirs[2][2].append(f"{d['title_v']}/Patches/{d['lang']}/{d['platform']}/{d['title_r']}")
+                    dirs[1][1].append(os.sep.join(('Shared releases', 'Patches', d_old['lang'], d_old['platform'], d_old['title_r'])))
+                    dirs[2][1].append(os.sep.join(('Shared releases', 'Patches', d['lang'], d['platform'], d['title_r'])))
+                    dirs[1][2].append(os.sep.join((d_old['title_v'], 'Patches', d_old['lang'], d_old['platform'], d_old['title_r'])))
+                    dirs[2][2].append(os.sep.join((d['title_v'], 'Patches', d['lang'], d['platform'], d['title_r'])))
                 else:
-                    dirs[1][1].append(f"Shared releases/{d_old['lang']}/{d_old['platform']}/{d_old['title_r']}")
-                    dirs[2][1].append(f"Shared releases/{d['lang']}/{d['platform']}/{d['title_r']}")
-                    dirs[1][2].append(f"{d_old['title_v']}/{d_old['lang']}/{d_old['platform']}/{d_old['title_r']}")
-                    dirs[2][2].append(f"{d['title_v']}/{d['lang']}/{d['platform']}/{d['title_r']}")
+                    dirs[1][1].append(os.sep.join(('Shared releases', d_old['lang'], d_old['platform'], d_old['title_r'])))
+                    dirs[2][1].append(os.sep.join(('Shared releases', d['lang'], d['platform'], d['title_r'])))
+                    dirs[1][2].append(os.sep.join((d_old['title_v'], d_old['lang'], d_old['platform'], d_old['title_r'])))
+                    dirs[2][2].append(os.sep.join((d['title_v'], d['lang'], d['platform'], d['title_r'])))
             else:
                 if d['patch']:
-                    dirs[1][0].append(f"{d_old['title_v']}/Patches/{d_old['lang']}/{d_old['platform']}/{d_old['title_r']}")
-                    dirs[2][0].append(f"{d['title_v']}/Patches/{d['lang']}/{d['platform']}/{d['title_r']}")
+                    dirs[1][0].append(os.sep.join((d_old['title_v'], 'Patches', d_old['lang'], d_old['platform'], d_old['title_r'])))
+                    dirs[2][0].append(os.sep.join((d['title_v'], 'Patches', d['lang'], d['platform'], d['title_r'])))
                 else:
-                    dirs[1][0].append(f"{d_old['title_v']}/{d_old['lang']}/{d_old['platform']}/{d_old['title_r']}")
-                    dirs[2][0].append(f"{d['title_v']}/{d['lang']}/{d['platform']}/{d['title_r']}")
-    if prev:
-        for d in prev:
-            if d['title_v'] not in dels:
-                dels.append(d['title_v'])
-            if d['multirelease']:
-                if d['patch']:
-                    dels.append(f"{d['title_v']}/Patches/{d['lang']}/{d['platform']}/{d['title_r']}")
+                    dirs[1][0].append(os.sep.join((d_old['title_v'], d_old['lang'], d_old['platform'], d_old['title_r'])))
+                    dirs[2][0].append(os.sep.join((d['title_v'], d['lang'], d['platform'], d['title_r'])))
+    if prev_db:
+        for d_old in prev_db:
+            if d_old['title_v'] not in dels:
+                dels.append(d_old['title_v'])
+            if d_old['multirelease']:
+                if d_old['patch']:
+                    dels.append(os.sep.join((d_old['title_v'], 'Patches', d_old['lang'], d_old['platform'], d_old['title_r'])))
                 else:
-                    dels.append(f"{d['title_v']}/{d['lang']}/{d['platform']}/{d['title_r']}")
+                    dels.append(os.sep.join((d_old['title_v'], d_old['lang'], d_old['platform'], d_old['title_r'])))
             else:
-                if d['patch']:
-                    dels.append(f"{d['title_v']}/Patches/{d['lang']}/{d['platform']}/{d['title_r']}")
+                if d_old['patch']:
+                    dels.append(os.sep.join((d_old['title_v'], 'Patches', d_old['lang'], d_old['platform'], d_old['title_r'])))
                 else:
-                    dels.append(f"{d['title_v']}/{d['lang']}/{d['platform']}/{d['title_r']}")
+                    dels.append(os.sep.join((d_old['title_v'], d_old['lang'], d_old['platform'], d_old['title_r'])))
     dels.reverse()
     dirs[1][0].reverse()
     dirs[1][1].reverse()
@@ -324,6 +387,8 @@ def write_structure(db, prev=None):
             if not os.path.exists(dirs[0][2][i]):
                 mk_dir(dirs[0][1][i], sym=dirs[0][2][i])
                 count[0] += 1
+        for d in dirs[3]:
+            mk_cover(*d)
     elif MODE == 2:
         while True:
             counter = [0, 0, 0]
@@ -418,6 +483,8 @@ def write_structure(db, prev=None):
                         padding = ' ' * (len(str(sum(counter)))+3)
                         print(f'{sum(counter)})  {dirs[0][2][i]}\n{padding}  ln {dirs[0][1][i]}')
             if flag:
+                for d in dirs[3]:
+                    mk_cover(*d)
                 break
             else:
                 nl = '\n'
@@ -429,6 +496,13 @@ def write_structure(db, prev=None):
     print(f'Created {count[0]} and edited {count[1]} and deleted {count[2]}!\nPlease check these for any dead links:\n{nl.join([" -> ".join(x) for x in zip(multirelease_edits[0], multirelease_edits[1])])}')
 
 
+icons = bool(input('Create icons for folders?\n'))
+if icons:
+    local_dump_path = input('Local dump path:\n')
+    if not local_dump_path:
+        local_dump_path = None
+else:
+    local_dump_path = None
 ls = natsort.natsorted(filter(lambda x: 'my superior ulist' in x and 'json' in x, next(os.walk('.'))[2]))
 if len(ls) == 0:
     input('Please provide a query dump.\n')
@@ -438,7 +512,7 @@ else:
     for i in range(len(ls)):
         print(f'{i+1})  {ls[i]}')
     c = ls[int(input('>'))-1]
-    fc = open(c, 'r')
+    fc = open(c, 'r', encoding='utf-8')
     dbc = json.load(fc)
     fc.close()
     create_structure(dbc)
@@ -447,12 +521,12 @@ else:
         print(f'{i + 2})  {ls[i]}')
     p = int(input('>')) - 2
     if p == -1:
-        write_structure(dbc)
+        write_structure(dbc, icons, local_dump=local_dump_path)
     else:
         p = ls[p]
-        fp = open(p, 'r')
+        fp = open(p, 'r', encoding='utf-8')
         dbp = json.load(fp)
         fp.close()
         create_structure(dbp)
-        write_structure(dbc, prev=dbp)
+        write_structure(dbc, icons, prev_db=dbp, local_dump=local_dump_path)
 input()
