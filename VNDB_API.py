@@ -4,7 +4,7 @@ from datetime import date
 import requests
 
 
-def dump(full_backup=False):
+def dump(full_backup):
     if full_backup:
         enm = ['Unknown', 'Pending', 'Obtained', 'On loan', 'Deleted']
         req = {
@@ -69,7 +69,7 @@ def dump(full_backup=False):
     return dmp
 
 
-def write_dump(full_backup=False, dmp=None):
+def write_dump(full_backup, dmp=None):
     if not dmp:
         dmp = dump(full_backup)
     with open(f'vndb{"-full_backup" if full_backup else ""}-{date.today().strftime("%Y-%m-%d")}.json', 'w',

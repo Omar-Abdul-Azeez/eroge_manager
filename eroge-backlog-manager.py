@@ -89,15 +89,15 @@ def special_release_edit(n, id):
     return n
 
 
-def ready_dump(vndb=None, egs=None):
-    if not (vndb or egs):
+def ready_dump(cdmp_egs=None, pdmp_egs=None, cdmp_vndb=None, pdmp_vndb=None):
+    if not (cdmp_egs or cdmp_vndb):
         raise ValueError
-    elif vndb and egs:
+    elif cdmp_egs and cdmp_vndb:
+        pass # don't care atm thx for asking
+    elif cdmp_egs:
         pass
-    elif vndb:
-        pass
-    elif egs:
-        pass
+    elif cdmp_vndb:
+        pass # don't care atm thx for asking
 
     i = 0
     while i < len(dmp):
@@ -572,20 +572,24 @@ def main():
                 dmp = EGS_SQL.write_dump('ubg', dmp=dmp)
         return dmp
 
-    cdmp_vndb = read_dump(dumps.VNDB)
-    pdmp_vndb = read_dump(dumps.VNDB, prev_dump=True)
-    cdmp_egs = read_dump(dumps.EGS)
-    pdmp_egs = read_dump(dumps.EGS, prev_dump=True)
+    cdmp_egs = None
+    pdmp_egs = None
+    if not input('Use EGS? empty for Y anything for N\n>'):
+        cdmp_egs = read_dump(dumps.EGS)
+        pdmp_egs = read_dump(dumps.EGS, prev_dump=True)
 
-    icons = not bool(input('Create icons for folders? empty for Y anything for N\n'))
-    if icons:
-        cv_path = input('VNDB covers dump path: leave empty to download covers\n')
-        if not cv_path:
-            cv_path = None
-    else:
-        cv_path = None
+    cv_path = None
+    cdmp_vndb = None
+    pdmp_vndb = None
+    if input('Use VNDB? empty for N anything for Y\n>'):
+        cdmp_vndb = read_dump(dumps.VNDB)
+        pdmp_vndb = read_dump(dumps.VNDB, prev_dump=True)
+        if not bool(input('Create icons for folders? empty for Y anything for N\n>')):
+            cv_path = input('VNDB covers dump path: leave empty to download covers\n>')
+            if not cv_path:
+                cv_path = None
 
-        ready_dump(dbc)
+        ready_dump()
         write_structure(dbc, icons, prev_db=dbp, cv_path=cv_path)
         input()
 

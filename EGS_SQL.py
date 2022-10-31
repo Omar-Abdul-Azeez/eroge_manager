@@ -6,7 +6,7 @@ import requests
 from bs4 import BeautifulSoup
 
 
-def dump(sql_table='ubg'):
+def dump(sql_table):
     sql = """WITH
     u AS (SELECT game,
                  possession
@@ -167,7 +167,7 @@ def dump(sql_table='ubg'):
     return dmp
 
 
-def write_dump(sql_table='ubg', dmp=None):
+def write_dump(sql_table, dmp=None):
     if not dmp:
         dmp = dump(sql_table)
     with open(f'egs-{sql_table}-{date.today().strftime("%Y-%m-%d")}.json', 'w', encoding='utf-8') as f:
