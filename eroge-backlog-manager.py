@@ -1,4 +1,5 @@
 # -*- encoding:utf-8 -*-
+import enum
 import os
 import operator
 import platform
@@ -8,6 +9,23 @@ import natsort
 import json
 from PIL import Image, ImageOps
 import cfscrape
+import VNDB_API
+import EGS_SQL
+from enum import Enum
+
+class dumps(Enum):
+    VNDB = 1
+    EGS = 2
+
+def ask(msg, choices: list = None, no_choice: bool = False):
+    print(msg)
+    if choices:
+        if no_choice:
+            print('1)None')
+        for i in range(len(choices)):
+            print(f'{i + 2 if no_choice else 1})  {choices[i]}')
+        return int(input('>')) - 2 if no_choice else 1
+    return input('>')
 
 # EXTRAS = ['イラスト', 'レーベル', 'ジャケット', 'マニュアル', 'アイコン', 'ヘッダー', 'あざらしWalker']
 # quotes
@@ -71,65 +89,74 @@ def special_release_edit(n, id):
     return n
 
 
-def create_structure(db):
+def ready_dump(vndb=None, egs=None):
+    if not (vndb or egs):
+        raise ValueError
+    elif vndb and egs:
+        pass
+    elif vndb:
+        pass
+    elif egs:
+        pass
+
     i = 0
-    while i < len(db):
-        if db[i]['title'] != special_game_edit(db[i]['title'], db[i]['id']):
-            db[i]['title'] = special_game_edit(db[i]['title'], db[i]['id'])
+    while i < len(dmp):
+        if dmp[i]['title'] != special_game_edit(dmp[i]['title'], dmp[i]['id']):
+            dmp[i]['title'] = special_game_edit(dmp[i]['title'], dmp[i]['id'])
         else:
-            if db[i]['title'].count('"') % 2 == 1:
-                print(f"{db[i]['title']} contains an odd number of quotes. Skipping novel!")
-                del db[i]
+            if dmp[i]['title'].count('"') % 2 == 1:
+                print(f"{dmp[i]['title']} contains an odd number of quotes. Skipping novel!")
+                del dmp[i]
                 continue
             else:
-                db[i]['title'] = replace_stuff_with_CJK(db[i]['title'])
+                dmp[i]['title'] = replace_stuff_with_CJK(dmp[i]['title'])
         j = 0
-        while j < len(db[i]['releases']):
-            if db[i]['releases'][j]['title'] != special_game_edit(db[i]['releases'][j]['title'], db[i]['releases'][j]['id']):
-                db[i]['releases'][j]['title'] = special_game_edit(db[i]['releases'][j]['title'], db[i]['releases'][j]['id'])
+        while j < len(dmp[i]['releases']):
+            if dmp[i]['releases'][j]['title'] != special_game_edit(dmp[i]['releases'][j]['title'], dmp[i]['releases'][j]['id']):
+                dmp[i]['releases'][j]['title'] = special_game_edit(dmp[i]['releases'][j]['title'], dmp[i]['releases'][j]['id'])
             else:
-                c = db[i]['releases'][j]['title'].count('"')
+                c = dmp[i]['releases'][j]['title'].count('"')
                 if c == 0:
-                    db[i]['releases'][j]['title'] = replace_stuff_with_CJK(db[i]['releases'][j]['title'])
+                    dmp[i]['releases'][j]['title'] = replace_stuff_with_CJK(dmp[i]['releases'][j]['title'])
                 elif c % 2 == 1:
-                    print(f"{db[i]['releases'][j]['title']} contains an odd number of quotes. Skipping release!")
-                    del db[i]['releases'][j]
+                    print(f"{dmp[i]['releases'][j]['title']} contains an odd number of quotes. Skipping release!")
+                    del dmp[i]['releases'][j]
                     continue
                 else:
-                    qInfo = [all([q in db[i]['title'] for q in quotes]) for quotes in dquotes]
+                    qInfo = [all([q in dmp[i]['title'] for q in quotes]) for quotes in dquotes]
                     # two dynamic qInfo.index(True) will remove cost of any(), reduce() and index()
                     if any(qInfo):
                         if not reduce(operator.xor, qInfo):
-                            print(f"{db[i]['title']} novel contains mixed quotes. Skipping {db[i]['releases'][j]['title']} release!")
-                            del db[i]['releases'][j]
+                            print(f"{dmp[i]['title']} novel contains mixed quotes. Skipping {dmp[i]['releases'][j]['title']} release!")
+                            del dmp[i]['releases'][j]
                             continue
                         else:
-                            db[i]['releases'][j]['title'] = replace_stuff_with_CJK(db[i]['releases'][j]['title'], dquotes[qInfo.index(True)])
+                            dmp[i]['releases'][j]['title'] = replace_stuff_with_CJK(dmp[i]['releases'][j]['title'], dquotes[qInfo.index(True)])
                     else:
                         # replacement can't be determined. using default
                         # happens when novel didn't have quotes but release does ???
-                        db[i]['releases'][j]['title'] = replace_stuff_with_CJK(db[i]['releases'][j]['title'])
-            if 'win' in db[i]['releases'][j]['platforms']:
-                db[i]['releases'][j]['platform'] = 'win'
+                        dmp[i]['releases'][j]['title'] = replace_stuff_with_CJK(dmp[i]['releases'][j]['title'])
+            if 'win' in dmp[i]['releases'][j]['platforms']:
+                dmp[i]['releases'][j]['platform'] = 'win'
             else:
-                if len(db[i]['releases'][j]['platforms']) == 1:
-                    db[i]['releases'][j]['platform'] = db[i]['releases'][j]['platforms'][0]
+                if len(dmp[i]['releases'][j]['platforms']) == 1:
+                    dmp[i]['releases'][j]['platform'] = dmp[i]['releases'][j]['platforms'][0]
                 else:
-                    print(db[i]['title'])
-                    print(db[i]['releases'][j]['title'])
-                    for k in range(len(db[i]['releases'][j]['platforms'])):
-                        print(f"{k+1})  {db[i]['releases'][j]['platforms'][k]}")
+                    print(dmp[i]['title'])
+                    print(dmp[i]['releases'][j]['title'])
+                    for k in range(len(dmp[i]['releases'][j]['platforms'])):
+                        print(f"{k+1})  {dmp[i]['releases'][j]['platforms'][k]}")
                     k = int(input('Please input the number of which platform to use:\n>'))-1
-                    db[i]['releases'][j]['platform'] = db[i]['releases'][j]['platforms'][k]
-            del db[i]['releases'][j]['platforms']
+                    dmp[i]['releases'][j]['platform'] = dmp[i]['releases'][j]['platforms'][k]
+            del dmp[i]['releases'][j]['platforms']
             j += 1
-        if not len(db[i]['releases']):
-            del db[i]
+        if not len(dmp[i]['releases']):
+            del dmp[i]
             continue
         i += 1
 
 
-def write_structure(db, icons=False, prev_db=None, local_dump=None):
+def write_structure(db, icons=False, prev_db=None, cv_path=None):
     #   mk,ln(src,dst) rename src     rename dst   icons
     # ( ([], [], []) , ([], [], []) , ([], [], []) , [])
     dirs = (([], [], []), ([], [], []), ([], [], []), [])
@@ -138,10 +165,10 @@ def write_structure(db, icons=False, prev_db=None, local_dump=None):
 
     def mk_cover(game, id, cv, url):
         path = f'{game}{os.sep}'
-        if local_dump:
+        if cv_path:
             if os.path.exists(f'{path}{id}.jpg'):
                 os.remove(f'{path}{id}.jpg')
-            shutil.copyfile(f'{local_dump}{os.sep}{cv[-2:]}{os.sep}{cv[2:]}.jpg', f'{path}{id}.jpg')
+            shutil.copyfile(f'{cv_path}{os.sep}{cv[-2:]}{os.sep}{cv[2:]}.jpg', f'{path}{id}.jpg')
         else:
             cv_img = cfscrape.create_scraper().get(url)
             cv_img.decode_content = True
@@ -486,37 +513,82 @@ def write_structure(db, icons=False, prev_db=None, local_dump=None):
     print(f'Created {count[0]} and edited {count[1]} and deleted {count[2]}!\nPlease check these for any dead links:\n{nl.join([" -> ".join(x) for x in zip(multirelease_edits[0], multirelease_edits[1])])}')
 
 
-icons = bool(input('Create icons for folders?\n'))
-if icons:
-    local_dump_path = input('Local dump path:\n')
-    if not local_dump_path:
-        local_dump_path = None
-else:
-    local_dump_path = None
-ls = natsort.natsorted(filter(lambda x: 'vndb' in x and 'json' in x, next(os.walk('.'))[2]))
-if len(ls) == 0:
-    input('Please provide a query dump.\n')
-    exit()
-else:
-    print('Please choose the current dump.')
-    for i in range(len(ls)):
-        print(f'{i+1})  {ls[i]}')
-    c = ls[int(input('>'))-1]
-    fc = open(c, 'r', encoding='utf-8')
-    dbc = json.load(fc)
-    fc.close()
-    create_structure(dbc)
-    print('Please choose the previous dump.\n1)  None')
-    for i in range(len(ls)):
-        print(f'{i + 2})  {ls[i]}')
-    p = int(input('>')) - 2
-    if p == -1:
-        write_structure(dbc, icons, local_dump=local_dump_path)
+def main():
+
+    def read_dump(dump: dumps, prev_dump=False):
+        if not isinstance(dump, dumps):
+            raise ValueError
+
+        if prev_dump:
+            choice = 1
+        else:
+            msg = f'{dump.name}:'
+            choices = ['Use downloaded dump',
+                      'Download latest dump and save it',
+                      'Download latest dump but don\'t save it']
+            choice = ask(msg, choices=choices)
+            while not 0 < choice < 4:
+                print()
+                choice = ask(msg, choices=choices)
+
+        ls = natsort.natsorted(next(os.walk('.'))[2])
+        if dump == dumps.VNDB:
+            ls = list(filter(lambda x: 'vndb' in x and 'json' in x and 'full_backup' not in x, ls))
+        elif dump == dumps.EGS:
+            ls = list(filter(lambda x: 'egs' in x and 'json' in x and 'bg' in x, ls))
+
+        if choice == 1 and len(ls) == 0:
+            print(f'Couldn\'t find local {dump.name} dump.')
+            if prev_dump:
+                print('Won\'t use a previous dump.')
+                return None
+            else:
+                print('Falling back to downloading and saving.')
+            choice = 2
+        if choice == 1:
+            if prev_dump:
+                msg = 'Choose previous dump:'
+                i = ask(msg, choices=ls, no_choice=True)
+                while -1 < i < len(ls):
+                    i = ask(msg, choices=ls, no_choice=True)
+            else:
+                msg = 'Choose current dump'
+                i = ask(msg, choices=ls, no_choice=False)
+                while -2 < i < len(ls):
+                    i = ask(msg, choices=ls, no_choice=False)
+                if i == -1:
+                    return None
+            with open(ls[i], 'r', encoding='utf-8') as f:
+                dmp = json.load(f)
+        elif choice == 2 or choice == 3:
+            if dump == dumps.VNDB:
+                dmp = VNDB_API.dump(False)
+            elif dump == dumps.EGS:
+                dmp = EGS_SQL.dump('ubg')
+        if choice == 2:
+            if dump == dumps.VNDB:
+                dmp = VNDB_API.write_dump(False, dmp=dmp)
+            elif dump == dumps.EGS:
+                dmp = EGS_SQL.write_dump('ubg', dmp=dmp)
+        return dmp
+
+    cdmp_vndb = read_dump(dumps.VNDB)
+    pdmp_vndb = read_dump(dumps.VNDB, prev_dump=True)
+    cdmp_egs = read_dump(dumps.EGS)
+    pdmp_egs = read_dump(dumps.EGS, prev_dump=True)
+
+    icons = not bool(input('Create icons for folders? empty for Y anything for N\n'))
+    if icons:
+        cv_path = input('VNDB covers dump path: leave empty to download covers\n')
+        if not cv_path:
+            cv_path = None
     else:
-        p = ls[p]
-        fp = open(p, 'r', encoding='utf-8')
-        dbp = json.load(fp)
-        fp.close()
-        create_structure(dbp)
-        write_structure(dbc, icons, prev_db=dbp, local_dump=local_dump_path)
-input()
+        cv_path = None
+
+        ready_dump(dbc)
+        write_structure(dbc, icons, prev_db=dbp, cv_path=cv_path)
+        input()
+
+
+if __name__ == '__main__':
+    main()

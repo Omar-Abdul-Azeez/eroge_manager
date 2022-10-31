@@ -1,0 +1,140 @@
+WITH
+u AS (SELECT game,
+             possession
+        FROM userreview
+            WHERE uid = 'Karasaru'
+     ),
+gb AS (SELECT gamelist.id as gid,
+              gamelist.vndb as vid,
+              gamename gname,
+              brandlist.id as bid,
+              brandlist.brandname bname,
+              model,
+              url,
+              brandlist.twitter
+         FROM brandlist
+         INNER JOIN gamelist
+             ON gamelist.brandname = brandlist.id
+       ),
+ugb AS (SELECT gid,
+               vid,
+               gname,
+               bid,
+               bname,
+               model,
+               possession,
+               url,
+               twitter
+          FROM gb
+          INNER JOIN u
+              ON u.game = gb.gid
+       ),
+bg AS (SELECT bid,
+              bname,
+              array_agg(gid) as gid,
+              array_agg(vid) as vid,
+              array_agg(gname) as gname,
+              array_agg(model) as model
+         FROM gb
+         GROUP BY bid,
+                  bname
+       ),
+ubg AS (SELECT bid,
+               bname,
+               array_agg(gid) as gid,
+               array_agg(vid) as vid,
+               array_agg(gname) as gname,
+               array_agg(model) as model,
+               array_agg(possession) as possession
+          FROM ugb
+          GROUP BY bid,
+                   bname
+       ),
+ugrgb AS (SELECT gamegrouplist.id as grid,
+                 name as grname,
+                 array_agg(gid) as gid,
+                 array_agg(vid) as vid,
+                 array_agg(gname) as gname,
+                 array_agg(bid) as bid,
+                 array_agg(bname) as bname,
+                 array_agg(model) as model,
+                 array_agg(possession) as possession
+            FROM belong_to_gamegroup_list
+            INNER JOIN gamegrouplist
+                ON gamegrouplist.id = gamegroup
+            INNER JOIN ugb
+                ON gid = game
+            GROUP BY gamegrouplist.id
+         ),
+kankei AS (SELECT id,
+                  game_subject,
+                  game_object,
+                  kind
+             FROM connection_between_lists_of_games
+                 WHERE kind IN ('apend','bundling')
+          ),
+ugbkankei AS (SELECT gid,
+                     vid,
+                     gname,
+                     bid,
+                     bname,
+                     model,
+                     possession,
+                     url,
+                     twitter,
+                     array_remove(array_agg(CASE
+                                            WHEN kan_ob.kind = 'bundling'
+                                            THEN kan_ob.game_subject
+                                            ELSE NULL
+                                            END
+                                            )
+                                  , NULL) as bundle_to,
+                     array_remove(array_agg(CASE
+                                            WHEN kan_sub.kind = 'bundling'
+                                            THEN kan_sub.game_object
+                                            ELSE NULL
+                                            END)
+                                  , NULL) as bundled_in,
+                     array_remove(array_agg(CASE
+                                            WHEN kan_sub.kind = 'apend'
+                                            THEN kan_sub.game_object
+                                            ELSE NULL
+                                            END)
+                                  , NULL) as append_to,
+                     array_remove(array_agg(CASE
+                                            WHEN kan_ob.kind = 'apend'
+                                            THEN kan_ob.game_subject
+                                            ELSE NULL
+                                            END)
+                                  , NULL) as appends
+                FROM ugb
+                LEFT OUTER JOIN kankei AS kan_ob
+                    ON kan_ob.game_object = gid AND kan_ob.game_subject IN (SELECT gid from ugb)
+                LEFT OUTER JOIN kankei AS kan_sub
+                    ON kan_sub.game_subject = gid AND kan_sub.game_object IN (SELECT gid FROM ugb)
+                GROUP BY gid,
+                         vid,
+                         gname,
+                         bid,
+                         bname,
+                         model,
+                         possession,
+                         url,
+                         twitter
+                ORDER BY bundle_to DESC,
+                         append_to DESC,
+                         bundled_in DESC,
+                         appends DESC
+             )
+
+/*
+u = userlist(gid + possession)だけ
+gb = game + brand
+ugb = userlistの game + brand
+bg = brand + array_agg(game)
+ubg = userlistの brand + array_agg(game)
+ugrgb = userlistの group + array_agg(game) + array_agg(brand)
+kankei = kankei WHERE kind IN ('apend','bundling')
+ugbkankei = userlistの game + brand + array_agg(bundle_to) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends)
+*/
+
