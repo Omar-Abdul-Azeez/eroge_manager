@@ -74,90 +74,82 @@ def special_release_edit(n, id):
 def create_structure(db):
     i = 0
     while i < len(db):
-        if not db[i]['rid'] or not (db[i]['status'] == '#pending#' or db[i]['status'] == 'obtained'):
+        if db[i]['title'] != special_game_edit(db[i]['title'], db[i]['id']):
+            db[i]['title'] = special_game_edit(db[i]['title'], db[i]['id'])
+        else:
+            if db[i]['title'].count('"') % 2 == 1:
+                print(f"{db[i]['title']} contains an odd number of quotes. Skipping novel!")
+                del db[i]
+                continue
+            else:
+                db[i]['title'] = replace_stuff_with_CJK(db[i]['title'])
+        j = 0
+        while j < len(db[i]['releases']):
+            if db[i]['releases'][j]['title'] != special_game_edit(db[i]['releases'][j]['title'], db[i]['releases'][j]['id']):
+                db[i]['releases'][j]['title'] = special_game_edit(db[i]['releases'][j]['title'], db[i]['releases'][j]['id'])
+            else:
+                c = db[i]['releases'][j]['title'].count('"')
+                if c == 0:
+                    db[i]['releases'][j]['title'] = replace_stuff_with_CJK(db[i]['releases'][j]['title'])
+                elif c % 2 == 1:
+                    print(f"{db[i]['releases'][j]['title']} contains an odd number of quotes. Skipping release!")
+                    del db[i]['releases'][j]
+                    continue
+                else:
+                    qInfo = [all([q in db[i]['title'] for q in quotes]) for quotes in dquotes]
+                    # two dynamic qInfo.index(True) will remove cost of any(), reduce() and index()
+                    if any(qInfo):
+                        if not reduce(operator.xor, qInfo):
+                            print(f"{db[i]['title']} novel contains mixed quotes. Skipping {db[i]['releases'][j]['title']} release!")
+                            del db[i]['releases'][j]
+                            continue
+                        else:
+                            db[i]['releases'][j]['title'] = replace_stuff_with_CJK(db[i]['releases'][j]['title'], dquotes[qInfo.index(True)])
+                    else:
+                        # replacement can't be determined. using default
+                        # happens when novel didn't have quotes but release does ???
+                        db[i]['releases'][j]['title'] = replace_stuff_with_CJK(db[i]['releases'][j]['title'])
+            if 'win' in db[i]['releases'][j]['platforms']:
+                db[i]['releases'][j]['platform'] = 'win'
+            else:
+                if len(db[i]['releases'][j]['platforms']) == 1:
+                    db[i]['releases'][j]['platform'] = db[i]['releases'][j]['platforms'][0]
+                else:
+                    print(db[i]['title'])
+                    print(db[i]['releases'][j]['title'])
+                    for k in range(len(db[i]['releases'][j]['platforms'])):
+                        print(f"{k+1})  {db[i]['releases'][j]['platforms'][k]}")
+                    k = int(input('Please input the number of which platform to use:\n>'))-1
+                    db[i]['releases'][j]['platform'] = db[i]['releases'][j]['platforms'][k]
+            del db[i]['releases'][j]['platforms']
+            j += 1
+        if not len(db[i]['releases']):
             del db[i]
             continue
-        if db[i]['title_v'] != special_game_edit(db[i]['title_v'], db[i]['vid']):
-            db[i]['title_v'] = special_game_edit(db[i]['title_v'], db[i]['vid'])
-        else:
-            if db[i]['title_v'].count('"') % 2 == 1:
-                print(f"{db[i]['title_v']} contains an odd number of quotes. Skipping novel!")
-                continue
-            else:
-                db[i]['title_v'] = replace_stuff_with_CJK(db[i]['title_v'])
-        for j in range(i):
-            if db[j]['title_v'] == db[i]['title_v'] and db[j]['vid'] != db[i]['vid']:
-                print(f"{db[i]['title_v']} Already exists. Appending visual novel ID!")
-                db[i]['title_v'] = f"{db[i]['title_v']} - {db[i]['vid']}"
-        if db[i]['title_r'] != special_game_edit(db[i]['title_r'], db[i]['rid']):
-            db[i]['title_r'] = special_game_edit(db[i]['title_r'], db[i]['rid'])
-        else:
-            c = db[i]['title_r'].count('"')
-            if c == 0:
-                db[i]['title_r'] = replace_stuff_with_CJK(db[i]['title_r'])
-            elif c % 2 == 1:
-                print(f"{db[i]['title_v']} contains an odd number of quotes. Skipping release!")
-                continue
-            else:
-                qInfo = [False not in [q in db[i]['title_v'] for q in quotes] for quotes in dquotes]
-                # two dynamic qInfo.index(True) will remove cost of any(), reduce() and index()
-                if any(qInfo):
-                    if not reduce(operator.xor, qInfo):
-                        print(f"{db[i]['title_v']} novel contains mixed quotes. Skipping {db[i]['title_r']} release!")
-                        continue
-                    else:
-                        db[i]['title_r'] = replace_stuff_with_CJK(db[i]['title_r'], dquotes[qInfo.index(True)])
-                else:
-                    # replacement can't be determined. using default
-                    # happens when novel didn't have quotes but release does ???
-                    db[i]['title_r'] = replace_stuff_with_CJK(db[i]['title_r'])
-        if 'win' in db[i]['platform']:
-            db[i]['platform'] = 'win'
-        else:
-            if len(db[i]['platform']) == 1:
-                db[i]['platform'] = db[i]['platform'][0]
-            else:
-                print(db[i]['title_v'])
-                print(db[i]['title_r'])
-                for j in range(len(db[i]['platform'])):
-                    print(f"{j+1})  {db[i]['platform'][j]}")
-                j = int(input('Please input the number of which platform to use:\n>'))-1
-                db[i]['platform'] = db[i]['platform'][j]
-        if 'en' in db[i]['lang'] and 'ja' not in db[i]['lang']:
-            db[i]['lang'] = 'EN'
-        elif 'en' not in db[i]['lang'] and 'ja' in db[i]['lang']:
-            db[i]['lang'] = 'JP'
-        else:
-            db[i]['lang'] = 'JP／EN'
-        for j in range(i):
-            if db[j]['patch'] == db[i]['patch'] and db[j]['platform'] == db[i]['platform'] and db[j]['lang'] == db[i]['lang'] and db[j]['title_r'] == db[i]['title_r'] and db[j]['rid'] != db[i]['rid']:
-                print(f"{db[i]['title_r']} Already exists. Appending release ID!")
-                db[i]['title_r'] = f"{db[i]['title_r']} - {db[i]['rid']}"
         i += 1
 
 
-def write_structure(db, icons, prev_db=None, local_dump=None):
-    #   mk,ln(src,dst) rename src     rename dst
-    # ( ([], [], []) , ([], [], []) , ([], [], []) )
+def write_structure(db, icons=False, prev_db=None, local_dump=None):
+    #   mk,ln(src,dst) rename src     rename dst   icons
+    # ( ([], [], []) , ([], [], []) , ([], [], []) , [])
     dirs = (([], [], []), ([], [], []), ([], [], []), [])
     dels = []
     multirelease_edits = ([], [])
 
-    def mk_cover(game, cv):
+    def mk_cover(game, id, cv, url):
         path = f'{game}{os.sep}'
         if local_dump:
-            if os.path.exists(f'{path}{game}.jpg'):
-                os.remove(f'{path}{game}.jpg')
-            shutil.copyfile(f'{local_dump}{os.sep}{cv[-2:]}{os.sep}{cv[2:]}.jpg', f'{path}{game}.jpg')
+            if os.path.exists(f'{path}{id}.jpg'):
+                os.remove(f'{path}{id}.jpg')
+            shutil.copyfile(f'{local_dump}{os.sep}{cv[-2:]}{os.sep}{cv[2:]}.jpg', f'{path}{id}.jpg')
         else:
-            url = f'https://s2.vndb.org/cv/{cv[-2:]}/{cv[2:]}.jpg'
             cv_img = cfscrape.create_scraper().get(url)
             cv_img.decode_content = True
-            if os.path.exists(f'{path}{game}.jpg'):
-                os.remove(f'{path}{game}.jpg')
-            with open(f'{path}{game}.jpg', 'wb') as f:
+            if os.path.exists(f'{path}{id}.jpg'):
+                os.remove(f'{path}{id}.jpg')
+            with open(f'{path}{id}.jpg', 'wb') as f:
                 f.write(cv_img.content)
-        img = Image.open(f'{path}{game}.jpg').convert('RGBA')
+        img = Image.open(f'{path}{id}.jpg').convert('RGBA')
         hsz = 256
         perc = (hsz/float(img.size[1]))
         wsz = int((float(img.size[0])*float(perc)))
@@ -166,9 +158,9 @@ def write_structure(db, icons, prev_db=None, local_dump=None):
         nw = Image.new('RGBA', (bg,bg), (0, 0, 0, 0))
         offset = (int(round(((bg-wsz) / 2), 0)), int(round(((bg-hsz) / 2), 0)))
         nw.paste(img, offset)
-        if os.path.exists(f'{path}{cv}.ico'):
-            os.remove(f'{path}{cv}.ico')
-        nw.save(f'{path}{cv}.ico')
+        if os.path.exists(f'{path}{id}.ico'):
+            os.remove(f'{path}{id}.ico')
+        nw.save(f'{path}{id}.ico')
         img.close()
         nw.close()
         if os.path.exists(f'{path}desktop.ini'):
@@ -177,27 +169,27 @@ def write_structure(db, icons, prev_db=None, local_dump=None):
             try:
                 with open(f'{path}desktop.ini', 'w', encoding='ANSI') as f:
                     f.write('[.ShellClassInfo]\nConfirmFileOp=0\n')
-                    f.write(f'IconResource={cv}.ico,0')
-                    f.write(f'\nIconFile={cv}.ico\nIconIndex=0')
+                    f.write(f'IconResource={id}.ico,0')
+                    f.write(f'\nIconFile={id}.ico\nIconIndex=0')
             except UnicodeEncodeError as e:
-                with open(f'{game}{os.sep}desktop.ini', 'w', encoding='utf-8') as f:
+                with open(f'{path}desktop.ini', 'w', encoding='utf-8') as f:
                     f.write('[.ShellClassInfo]\nConfirmFileOp=0\n')
-                    f.write(f'IconResource={cv}.ico,0')
-                    f.write(f'\nIconFile={cv}.ico\nIconIndex=0')
+                    f.write(f'IconResource={id}.ico,0')
+                    f.write(f'\nIconFile={id}.ico\nIconIndex=0')
             os.system(f'attrib +r "{game}"')
             os.system(f'attrib +h "{path}desktop.ini"')
-            os.system(f'attrib +h "{path}{cv}.ico"')
+            os.system(f'attrib +h "{path}{id}.ico"')
         elif platform.system() == 'Linux':
             try:
-                with open(f'{game}{os.sep}desktop.ini', 'w+', encoding='iso_8859_1') as f:
+                with open(f'{path}desktop.ini', 'w+', encoding='iso_8859_1') as f:
                     f.write('[.ShellClassInfo]\nConfirmFileOp=0\n')
-                    f.write(f'IconResource={cv}.ico,0')
-                    f.write(f'\nIconFile={cv}.ico\nIconIndex=0')
+                    f.write(f'IconResource={id}.ico,0')
+                    f.write(f'\nIconFile={id}.ico\nIconIndex=0')
             except UnicodeEncodeError as e:
-                with open(f'{game}{os.sep}desktop.ini', 'w', encoding='utf-8') as f:
+                with open(f'{path}desktop.ini', 'w', encoding='utf-8') as f:
                     f.write('[.ShellClassInfo]\nConfirmFileOp=0\n')
-                    f.write(f'IconResource={cv}.ico,0')
-                    f.write(f'\nIconFile={cv}.ico\nIconIndex=0')
+                    f.write(f'IconResource={id}.ico,0')
+                    f.write(f'\nIconFile={id}.ico\nIconIndex=0')
     def mk_dir(dir, sym=None):
         to_mk = dir.split(os.sep)
         to_mk = [os.path.join(*(to_mk[:i + 1])) for i in range(len(to_mk))]
@@ -269,78 +261,77 @@ def write_structure(db, icons, prev_db=None, local_dump=None):
         else:
             mv_dir(dir, f'Deleted{os.sep}{dir}')
 
-    for d in db:
+    for v in db:
         if prev_db:
-            ind = [i for i in range(len(prev_db)) if prev_db[i]['vid'] == d['vid'] and prev_db[i]['rid'] == d['rid']]
+            ind = [i for i in range(len(prev_db)) if prev_db[i]['id'] == v['id']]
             if len(ind) == 0:
-                d_old = None
+                v_old = None
             else:
-                d_old = prev_db.pop(ind[0])
+                v_old = prev_db.pop(ind[0])
         else:
-            d_old = None
-        if not d_old or (d['patch'] == d_old['patch'] and d['lang'] == d_old['lang'] and
-                         d['title_v'] == d_old['title_v'] and d['title_r'] == d_old['title_r'] and
-                         d['platform'] == d_old['platform'] and d['multirelease'] == d_old['multirelease']):
-            if d['title_v'] not in dirs[0][0]:
-                dirs[0][0].append(d['title_v'])
-                if icons:
-                    dirs[3].append((d['title_v'], d['cv']))
-                dirs[0][0].append(os.sep.join((d['title_v'], 'Extras')))
-            if d['multirelease']:
-                if d['patch']:
-                    dirs[0][1].append(os.sep.join(('Shared releases', 'Patches', d['lang'], d['platform'], d['title_r'])))
-                    dirs[0][2].append(os.sep.join((d['title_v'], 'Patches', d['lang'], d['platform'], d['title_r'])))
+            v_old = None
+        if not v_old:
+            dirs[0][0].append(v['title'])
+            dirs[0][0].append(os.sep.join(('Extras', v['title'])))
+            dirs[3].append([v['title'], v['id'], *v['cover']])
+            for r in v['releases']:
+                if len(r['vns']) > 1:
+                    if r['patch']:
+                        dirs[0][1].append(os.sep.join(('Shared releases', 'Patches', r['platform'], r['title'])))
+                        dirs[0][2].append(os.sep.join((v['title'], 'Patches', r['platform'], r['title'])))
+                    else:
+                        dirs[0][1].append(os.sep.join(('Shared releases', r['platform'], r['title'])))
+                        dirs[0][2].append(os.sep.join((v['title'], r['platform'], r['title'])))
                 else:
-                    dirs[0][1].append(os.sep.join(('Shared releases', d['lang'], d['platform'], d['title_r'])))
-                    dirs[0][2].append(os.sep.join((d['title_v'], d['lang'], d['platform'], d['title_r'])))
-            else:
-                if d['patch']:
-                    dirs[0][0].append(os.sep.join((d['title_v'], 'Patches', d['lang'], d['platform'], d['title_r'])))
-                else:
-                    dirs[0][0].append(os.sep.join((d['title_v'], d['lang'], d['platform'], d['title_r'])))
+                    if v['patch']:
+                        dirs[0][0].append(os.sep.join((v['title'], 'Patches', r['platform'], r['title'])))
+                    else:
+                        dirs[0][0].append(os.sep.join((v['title'], r['platform'], r['title'])))
+        elif v['title'] == v_old['title']:
+            pass
         else:
-            if d['multirelease'] != d_old['multirelease']:
-                print(f"Can't handle edit of {d_old['title_v']}/{d_old['title_r']} to {d['title_v']}/{d['title_r']} with different multirelease flags!")
+            if v['multirelease'] != v_old['multirelease']:
+                print(f"Can't handle edit of {v_old['title_v']}/{v_old['title_r']} to {v['title_v']}/{v['title_r']} with different multirelease flags!")
                 continue
-            if d['title_v'] not in dirs[2][0]:
-                dirs[1][0].append(d_old['title_v'])
-                dirs[2][0].append(d['title_v'])
-                if icons and (d['cv'] != d_old['cv'] or d['title_v'] != d_old['title_v']):
-                    dirs[3].append((d['title_v'], d['cv']))
-                dirs[1][0].append(os.sep.join((d_old['title_v'], 'Extras')))
-                dirs[2][0].append(os.sep.join((d['title_v'], 'Extras')))
-            if d['multirelease']:
-                if d['patch']:
-                    dirs[1][1].append(os.sep.join(('Shared releases', 'Patches', d_old['lang'], d_old['platform'], d_old['title_r'])))
-                    dirs[2][1].append(os.sep.join(('Shared releases', 'Patches', d['lang'], d['platform'], d['title_r'])))
-                    dirs[1][2].append(os.sep.join((d_old['title_v'], 'Patches', d_old['lang'], d_old['platform'], d_old['title_r'])))
-                    dirs[2][2].append(os.sep.join((d['title_v'], 'Patches', d['lang'], d['platform'], d['title_r'])))
+            if v['title_v'] not in dirs[2][0]:
+                dirs[1][0].append(v_old['title_v'])
+                dirs[2][0].append(v['title_v'])
+                if icons and (v['cv'] != v_old['cv'] or v['title_v'] != v_old['title_v']):
+                    dirs[3].append((v['title_v'], v['cv']))
+                dirs[1][0].append(os.sep.join((v_old['title_v'], 'Extras')))
+                dirs[2][0].append(os.sep.join((v['title_v'], 'Extras')))
+            if v['multirelease']:
+                if v['patch']:
+                    dirs[1][1].append(os.sep.join(('Shared releases', 'Patches', v_old['lang'], v_old['platform'], v_old['title_r'])))
+                    dirs[2][1].append(os.sep.join(('Shared releases', 'Patches', v['lang'], v['platform'], v['title_r'])))
+                    dirs[1][2].append(os.sep.join((v_old['title_v'], 'Patches', v_old['lang'], v_old['platform'], v_old['title_r'])))
+                    dirs[2][2].append(os.sep.join((v['title_v'], 'Patches', v['lang'], v['platform'], v['title_r'])))
                 else:
-                    dirs[1][1].append(os.sep.join(('Shared releases', d_old['lang'], d_old['platform'], d_old['title_r'])))
-                    dirs[2][1].append(os.sep.join(('Shared releases', d['lang'], d['platform'], d['title_r'])))
-                    dirs[1][2].append(os.sep.join((d_old['title_v'], d_old['lang'], d_old['platform'], d_old['title_r'])))
-                    dirs[2][2].append(os.sep.join((d['title_v'], d['lang'], d['platform'], d['title_r'])))
+                    dirs[1][1].append(os.sep.join(('Shared releases', v_old['lang'], v_old['platform'], v_old['title_r'])))
+                    dirs[2][1].append(os.sep.join(('Shared releases', v['lang'], v['platform'], v['title_r'])))
+                    dirs[1][2].append(os.sep.join((v_old['title_v'], v_old['lang'], v_old['platform'], v_old['title_r'])))
+                    dirs[2][2].append(os.sep.join((v['title_v'], v['lang'], v['platform'], v['title_r'])))
             else:
-                if d['patch']:
-                    dirs[1][0].append(os.sep.join((d_old['title_v'], 'Patches', d_old['lang'], d_old['platform'], d_old['title_r'])))
-                    dirs[2][0].append(os.sep.join((d['title_v'], 'Patches', d['lang'], d['platform'], d['title_r'])))
+                if v['patch']:
+                    dirs[1][0].append(os.sep.join((v_old['title_v'], 'Patches', v_old['lang'], v_old['platform'], v_old['title_r'])))
+                    dirs[2][0].append(os.sep.join((v['title_v'], 'Patches', v['lang'], v['platform'], v['title_r'])))
                 else:
-                    dirs[1][0].append(os.sep.join((d_old['title_v'], d_old['lang'], d_old['platform'], d_old['title_r'])))
-                    dirs[2][0].append(os.sep.join((d['title_v'], d['lang'], d['platform'], d['title_r'])))
+                    dirs[1][0].append(os.sep.join((v_old['title_v'], v_old['lang'], v_old['platform'], v_old['title_r'])))
+                    dirs[2][0].append(os.sep.join((v['title_v'], v['lang'], v['platform'], v['title_r'])))
     if prev_db:
-        for d_old in prev_db:
-            if d_old['title_v'] not in dels:
-                dels.append(d_old['title_v'])
-            if d_old['multirelease']:
-                if d_old['patch']:
-                    dels.append(os.sep.join((d_old['title_v'], 'Patches', d_old['lang'], d_old['platform'], d_old['title_r'])))
+        for v_old in prev_db:
+            if v_old['title_v'] not in dels:
+                dels.append(v_old['title_v'])
+            if v_old['multirelease']:
+                if v_old['patch']:
+                    dels.append(os.sep.join((v_old['title_v'], 'Patches', v_old['lang'], v_old['platform'], v_old['title_r'])))
                 else:
-                    dels.append(os.sep.join((d_old['title_v'], d_old['lang'], d_old['platform'], d_old['title_r'])))
+                    dels.append(os.sep.join((v_old['title_v'], v_old['lang'], v_old['platform'], v_old['title_r'])))
             else:
-                if d_old['patch']:
-                    dels.append(os.sep.join((d_old['title_v'], 'Patches', d_old['lang'], d_old['platform'], d_old['title_r'])))
+                if v_old['patch']:
+                    dels.append(os.sep.join((v_old['title_v'], 'Patches', v_old['lang'], v_old['platform'], v_old['title_r'])))
                 else:
-                    dels.append(os.sep.join((d_old['title_v'], d_old['lang'], d_old['platform'], d_old['title_r'])))
+                    dels.append(os.sep.join((v_old['title_v'], v_old['lang'], v_old['platform'], v_old['title_r'])))
     dels.reverse()
     dirs[1][0].reverse()
     dirs[1][1].reverse()
@@ -352,12 +343,12 @@ def write_structure(db, icons, prev_db=None, local_dump=None):
     flag = False
     if not os.path.exists('Shared releases'):
         mk_dir('Shared releases')
-    if not os.path.exists('Shared extras'):
-        mk_dir('Shared extras')
+    if not os.path.exists(os.sep.join(('Extras', 'Shared extras'))):
+        mk_dir(os.sep.join(('Extras', 'Shared extras')))
     if MODE == 1:
-        for d in dels:
-            if os.path.exists(d):
-                rm_dir(d)
+        for v in dels:
+            if os.path.exists(v):
+                rm_dir(v)
                 count[2] += 1
         for i in range(len(dirs[1][0])):
             if os.path.exists(dirs[1][0][i]):
@@ -379,16 +370,16 @@ def write_structure(db, icons, prev_db=None, local_dump=None):
                 if not os.path.exists(dirs[2][2][i]):
                     mk_dir(dirs[2][1][i], sym=dirs[2][2][i])
                     count[0] += 1
-        for d in dirs[0][0]:
-            if not os.path.exists(d):
-                mk_dir(d)
+        for v in dirs[0][0]:
+            if not os.path.exists(v):
+                mk_dir(v)
                 count[0] += 1
         for i in range(len(dirs[0][1])):
             if not os.path.exists(dirs[0][2][i]):
                 mk_dir(dirs[0][1][i], sym=dirs[0][2][i])
                 count[0] += 1
-        for d in dirs[3]:
-            mk_cover(*d)
+        for v in dirs[3]:
+            mk_cover(*v)
     elif MODE == 2:
         while True:
             counter = [0, 0, 0]
@@ -396,16 +387,16 @@ def write_structure(db, icons, prev_db=None, local_dump=None):
                 print('Deleting...')
             else:
                 print('DELETIONS:')
-            for d in dels:
-                if os.path.exists(d):
+            for v in dels:
+                if os.path.exists(v):
                     counter[2] += 1
                     if sum(counter) in skip_lines:
                         continue
                     if flag:
-                        rm_dir(d)
+                        rm_dir(v)
                         count[2] += 1
                     else:
-                        print(f'{sum(counter)})  {d}')
+                        print(f'{sum(counter)})  {v}')
             if flag:
                 print('Editing...')
             else:
@@ -461,16 +452,16 @@ def write_structure(db, icons, prev_db=None, local_dump=None):
                 print('Creating...')
             else:
                 print('CREATIONS:')
-            for d in dirs[0][0]:
-                if not os.path.exists(d):
+            for g in dirs[0][0]:
+                if not os.path.exists(g):
                     counter[0] += 1
                     if sum(counter) in skip_lines:
                         continue
                     if flag:
-                        mk_dir(d)
+                        mk_dir(g)
                         count[0] += 1
                     else:
-                        print(f'{sum(counter)})  {d}')
+                        print(f'{sum(counter)})  {g}')
             for i in range(len(dirs[0][1])):
                 if not os.path.exists(dirs[0][2][i]):
                     counter[0] += 1
@@ -482,16 +473,15 @@ def write_structure(db, icons, prev_db=None, local_dump=None):
                     else:
                         padding = ' ' * (len(str(sum(counter)))+3)
                         print(f'{sum(counter)})  {dirs[0][2][i]}\n{padding}  ln {dirs[0][1][i]}')
-            if flag:
-                for d in dirs[3]:
-                    mk_cover(*d)
-                break
-            else:
+            if flag and icons:
+                for c in dirs[3]:
+                    mk_cover(*c)
+            if not flag:
                 nl = '\n'
                 if input(f'Execute {counter[0]} creations and {counter[1]} edits and {counter[2]} deletions?\nMultirelease edits:\n{nl.join([" -> ".join(x) for x in zip(multirelease_edits[0], multirelease_edits[1])])}\n>'):
                     flag = True
-                else:
-                    break
+            else:
+                break
     nl = '\n'
     print(f'Created {count[0]} and edited {count[1]} and deleted {count[2]}!\nPlease check these for any dead links:\n{nl.join([" -> ".join(x) for x in zip(multirelease_edits[0], multirelease_edits[1])])}')
 
@@ -503,7 +493,7 @@ if icons:
         local_dump_path = None
 else:
     local_dump_path = None
-ls = natsort.natsorted(filter(lambda x: 'my superior ulist' in x and 'json' in x, next(os.walk('.'))[2]))
+ls = natsort.natsorted(filter(lambda x: 'vndb' in x and 'json' in x, next(os.walk('.'))[2]))
 if len(ls) == 0:
     input('Please provide a query dump.\n')
     exit()
