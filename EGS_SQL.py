@@ -8,46 +8,49 @@ from bs4 import BeautifulSoup
 
 def dump(sql_table):
     sql = """WITH
+    gb AS (SELECT gamelist.id as gid,
+                  gamelist.vndb as vid,
+                  gamename as gname,
+                  brandlist.id as bid,
+                  brandlist.brandname as bname
+             FROM gamelist
+             INNER JOIN brandlist
+                 ON brandlist.id = gamelist.brandname
+             ORDER BY gid
+           ),
+    bg AS (SELECT brandlist.id as bid,
+                  brandlist.brandname as bname,
+                  array_agg(gamelist.id) as gid,
+                  array_agg(gamelist.vndb) as vid,
+                  array_agg(gamename) as gname,
+                  array_agg(model) as model
+             FROM brandlist
+             INNER JOIN gamelist
+                 ON gamelist.brandname = brandlist.id
+             GROUP BY bid,
+                      bname
+             ORDER BY bid
+           ),
     u AS (SELECT game,
                  possession
             FROM userreview
                 WHERE uid = 'Karasaru'
+            ORDER BY game
          ),
-    gb AS (SELECT gamelist.id as gid,
-                  gamelist.vndb as vid,
-                  gamename gname,
-                  brandlist.id as bid,
-                  brandlist.brandname bname,
-                  model,
-                  url,
-                  brandlist.twitter
-             FROM brandlist
-             INNER JOIN gamelist
-                 ON gamelist.brandname = brandlist.id
-           ),
-    ugb AS (SELECT gid,
-                   vid,
-                   gname,
-                   bid,
-                   bname,
+    ugb AS (SELECT gamelist.id as gid,
+                   gamelist.vndb as vid,
+                   gamename as gname,
+                   brandlist.id as bid,
+                   brandlist.brandname as bname,
                    model,
-                   possession,
-                   url,
-                   twitter
-              FROM gb
-              INNER JOIN u
-                  ON u.game = gb.gid
-           ),
-    bg AS (SELECT bid,
-                  bname,
-                  array_agg(gid) as gid,
-                  array_agg(vid) as vid,
-                  array_agg(gname) as gname,
-                  array_agg(model) as model
-             FROM gb
-             GROUP BY bid,
-                      bname
-           ),
+                   possession
+              FROM u
+              INNER JOIN gamelist
+                   ON gamelist.id = u.game
+              INNER JOIN brandlist
+                   ON brandlist.id = gamelist.brandname
+              ORDER BY gid
+            ),
     ubg AS (SELECT bid,
                    bname,
                    array_agg(gid) as gid,
@@ -58,6 +61,7 @@ def dump(sql_table):
               FROM ugb
               GROUP BY bid,
                        bname
+              ORDER BY bid
            ),
     ugrgb AS (SELECT gamegrouplist.id as grid,
                      name as grname,
@@ -73,7 +77,8 @@ def dump(sql_table):
                     ON gamegrouplist.id = gamegroup
                 INNER JOIN ugb
                     ON gid = game
-                GROUP BY gamegrouplist.id
+                GROUP BY grid
+                ORDER BY grid
              ),
     kankei AS (SELECT id,
                       game_subject,
@@ -81,6 +86,7 @@ def dump(sql_table):
                       kind
                  FROM connection_between_lists_of_games
                      WHERE kind IN ('apend','bundling')
+                 ORDER BY id
               ),
     ugbkankei AS (SELECT gid,
                          vid,
@@ -89,15 +95,13 @@ def dump(sql_table):
                          bname,
                          model,
                          possession,
-                         url,
-                         twitter,
                          array_remove(array_agg(CASE
                                                 WHEN kan_ob.kind = 'bundling'
                                                 THEN kan_ob.game_subject
                                                 ELSE NULL
                                                 END
                                                 )
-                                      , NULL) as bundle_to,
+                                      , NULL) as bundle_of,
                          array_remove(array_agg(CASE
                                                 WHEN kan_sub.kind = 'bundling'
                                                 THEN kan_sub.game_object
@@ -127,24 +131,23 @@ def dump(sql_table):
                              bid,
                              bname,
                              model,
-                             possession,
-                             url,
-                             twitter
-                    ORDER BY bundle_to DESC,
+                             possession
+                    ORDER BY bundle_of DESC,
                              append_to DESC,
                              bundled_in DESC,
-                             appends DESC
+                             appends DESC,
+                             gid
                  )
-
+    
     /*
-    u = userlist(gid + possession)だけ
     gb = game + brand
-    ugb = userlistの game + brand
     bg = brand + array_agg(game)
+    u = userlist(gid + possession)だけ
+    ugb = userlistの game + brand
     ubg = userlistの brand + array_agg(game)
     ugrgb = userlistの group + array_agg(game) + array_agg(brand)
     kankei = kankei WHERE kind IN ('apend','bundling')
-    ugbkankei = userlistの game + brand + array_agg(bundle_to) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends)
+    ugbkankei = userlistの game + brand + array_agg(bundle_of) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends)
     */
     """
 
@@ -164,11 +167,31 @@ def dump(sql_table):
             continue
         values = [col.text for col in row]
         dmp[values[0]] = dict(zip(headers, values[1:]))
+        if sql_table in ['bg', 'ubg', 'ugrgb', 'ugbkankei']:
+            try:
+                s = dmp[values[0]]['possession']
+                if s[0] == '{' and s[-1] == '}':
+                    dmp[values[0]]['possession'] = list(map(lambda x: True if x == 't' else False if x == 'f' else None, s[1:-1].split(',')))
+            except Exception as e:
+                pass
+            for agg_col in ['gid','vid','gname','model','bid','bname','bundled_in','bundle_of','appends','append_to']:
+                try:
+                    s = dmp[values[0]][agg_col]
+                    if s[0] == '{' and s[-1] == '}':
+                        tmp = s[1:-1].split(',')
+                        for z in range(len(tmp)):
+                            if ' ' in tmp[z] and tmp[z][0] == '"' and tmp[z][-1] == '"':
+                                tmp[z] = tmp[z][1:-1]
+                            if tmp[z] == 'NULL':
+                                tmp[z] = None
+                        dmp[values[0]][agg_col] = tmp
+                except Exception as e:
+                    pass
     return dmp
 
 
 def write_dump(sql_table, dmp=None):
-    if not dmp:
+    if dmp is None:
         dmp = dump(sql_table)
     with open(f'egs-{sql_table}-{date.today().strftime("%Y-%m-%d")}.json', 'w', encoding='utf-8') as f:
         json.dump(dmp, f, ensure_ascii=False)
@@ -183,7 +206,7 @@ def main():
               "ubg = userlistの brand + array_agg(game)\n"
               "ugrgb = userlistの group + array_agg(game) + array_agg(brand)\n"
               "kankei = kankei WHERE kind IN ('apend','bundling')\n"
-              "ugbkankei = userlistの game + brand + array_agg(bundle_to) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends))")
+              "ugbkankei = userlistの game + brand + array_agg(bundle_of) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends))")
         return input('SQL Table:\n>')
 
     sql_tables = ['u', 'gb', 'ugb', 'bg', 'ubg', 'ugrgb', 'kankei', 'ugbkankei']

@@ -1,5 +1,4 @@
 # -*- encoding:utf-8 -*-
-import enum
 import os
 import operator
 import platform
@@ -7,7 +6,7 @@ import shutil
 from functools import reduce
 import natsort
 import json
-from PIL import Image, ImageOps
+from pil import Image, ImageOps
 import cfscrape
 import VNDB_API
 import EGS_SQL
@@ -19,27 +18,29 @@ class dumps(Enum):
 
 def ask(msg, choices: list = None, no_choice: bool = False):
     print(msg)
-    if choices:
+    if choices is not None:
         if no_choice:
-            print('1)None')
+            print('1)  None')
         for i in range(len(choices)):
-            print(f'{i + 2 if no_choice else 1})  {choices[i]}')
-        return int(input('>')) - 2 if no_choice else 1
+            print(f'{i + (2 if no_choice else 1)})  {choices[i]}')
+        return int(input('>')) - (2 if no_choice else 1)
     return input('>')
 
-# EXTRAS = ['イラスト', 'レーベル', 'ジャケット', 'マニュアル', 'アイコン', 'ヘッダー', 'あざらしWalker']
+# EXTRAS = ['壁紙', 'イラスト', 'レーベル', 'ジャケット', 'マニュアル', 'アイコン', 'ヘッダー', 'あざらしWalker']
 # quotes
 dquotes = [('「', '」'), ('『', '』'), ('“', '”')]
 # special edits
+sg = {}
+sb = {}
 sv = {'v3182': 'SHANGRLIA'}
 sr = {}
 # MODES: 1 = exec, 2 = dry run skip
 MODE = 2
 skip_lines = []
-quick_str = ''
-# parse quick_str
-if quick_str != '':
-    ls = quick_str.split(' ')
+skip_str = ''
+# parse skip_str
+if skip_str != '':
+    ls = skip_str.split(' ')
     for i in range(len(ls)):
         if '-' in ls[i]:
             spl = ls[i].split('-')
@@ -48,15 +49,21 @@ if quick_str != '':
             skip_lines.append(int(ls[i]))
 
 
-def replace_stuff_with_CJK(string, dquotes=dquotes[0]):
+def special_chars_to_full_width(string, dquotes=dquotes[2]):
     # \/:*?"<>|
-    # WON'T REPLACE <> NOR TRAILING PERIODS AND F NTFS (actually haven't encountered yet)
-    if len(string) == 0:
-        return string
+    # WON'T REPLACE <> NOR TRAILING PERIODS AND F NTFS (actually haven't encountered yet（；ﾟдﾟ）)
+    if string[-1] == '.':
+        print(f'TRAILING PERIOD（；ﾟдﾟ） Title: {string}')
+        input()
+        raise ValueError
     lis = []
     flag = False
     for c in string:
-        if c == '\\':
+        if c == '<' or c == '>':
+            print(f'<> IN TITLE（；ﾟдﾟ） Title: {string}')
+            input()
+            raise ValueError
+        elif c == '\\':
             lis.append('＼')
         elif c == '/':
             lis.append('／')
@@ -75,88 +82,120 @@ def replace_stuff_with_CJK(string, dquotes=dquotes[0]):
     return ''.join(lis)
 
 
-def special_game_edit(n, id):
-    v = sv.get(id)
-    if v:
-        return v
-    return n
+def special_brand_title(id):
+    return sb.get(id)
 
 
-def special_release_edit(n, id):
-    v = sv.get(id)
-    if v:
-        return v
-    return n
+def special_game_title(id):
+    return sg.get(id)
 
 
-def ready_dump(cdmp_egs=None, pdmp_egs=None, cdmp_vndb=None, pdmp_vndb=None):
-    if not (cdmp_egs or cdmp_vndb):
+def special_visual_title(t, id):
+    st = sv.get(id)
+    if st is not None:
+        return st
+    return t
+
+
+def special_release_title(t, id):
+    st = sv.get(id)
+    if st is not None:
+        return st
+    return t
+
+
+def ready_dump(dmp_egs=None, dmp_vndb=None):
+    if not (dmp_egs or dmp_vndb):
         raise ValueError
-    elif cdmp_egs and cdmp_vndb:
+    elif dmp_egs and dmp_vndb:
         pass # don't care atm thx for asking
-    elif cdmp_egs:
-        pass
-    elif cdmp_vndb:
-        pass # don't care atm thx for asking
-
-    i = 0
-    while i < len(dmp):
-        if dmp[i]['title'] != special_game_edit(dmp[i]['title'], dmp[i]['id']):
-            dmp[i]['title'] = special_game_edit(dmp[i]['title'], dmp[i]['id'])
-        else:
-            if dmp[i]['title'].count('"') % 2 == 1:
-                print(f"{dmp[i]['title']} contains an odd number of quotes. Skipping novel!")
-                del dmp[i]
-                continue
-            else:
-                dmp[i]['title'] = replace_stuff_with_CJK(dmp[i]['title'])
-        j = 0
-        while j < len(dmp[i]['releases']):
-            if dmp[i]['releases'][j]['title'] != special_game_edit(dmp[i]['releases'][j]['title'], dmp[i]['releases'][j]['id']):
-                dmp[i]['releases'][j]['title'] = special_game_edit(dmp[i]['releases'][j]['title'], dmp[i]['releases'][j]['id'])
-            else:
-                c = dmp[i]['releases'][j]['title'].count('"')
-                if c == 0:
-                    dmp[i]['releases'][j]['title'] = replace_stuff_with_CJK(dmp[i]['releases'][j]['title'])
-                elif c % 2 == 1:
-                    print(f"{dmp[i]['releases'][j]['title']} contains an odd number of quotes. Skipping release!")
-                    del dmp[i]['releases'][j]
-                    continue
-                else:
-                    qInfo = [all([q in dmp[i]['title'] for q in quotes]) for quotes in dquotes]
-                    # two dynamic qInfo.index(True) will remove cost of any(), reduce() and index()
-                    if any(qInfo):
-                        if not reduce(operator.xor, qInfo):
-                            print(f"{dmp[i]['title']} novel contains mixed quotes. Skipping {dmp[i]['releases'][j]['title']} release!")
-                            del dmp[i]['releases'][j]
-                            continue
-                        else:
-                            dmp[i]['releases'][j]['title'] = replace_stuff_with_CJK(dmp[i]['releases'][j]['title'], dquotes[qInfo.index(True)])
+    elif dmp_egs:
+        to_del = []
+        for bid, info in dmp_egs.items():
+            i = 0
+            while i < len(info['gid']):
+                if info['possession'][i]:
+                    tmp = special_brand_title(bid)
+                    if tmp is None:
+                        info['bname'][i] = special_chars_to_full_width(info['bname'][i])
                     else:
-                        # replacement can't be determined. using default
-                        # happens when novel didn't have quotes but release does ???
-                        dmp[i]['releases'][j]['title'] = replace_stuff_with_CJK(dmp[i]['releases'][j]['title'])
-            if 'win' in dmp[i]['releases'][j]['platforms']:
-                dmp[i]['releases'][j]['platform'] = 'win'
-            else:
-                if len(dmp[i]['releases'][j]['platforms']) == 1:
-                    dmp[i]['releases'][j]['platform'] = dmp[i]['releases'][j]['platforms'][0]
-                else:
-                    print(dmp[i]['title'])
-                    print(dmp[i]['releases'][j]['title'])
-                    for k in range(len(dmp[i]['releases'][j]['platforms'])):
-                        print(f"{k+1})  {dmp[i]['releases'][j]['platforms'][k]}")
-                    k = int(input('Please input the number of which platform to use:\n>'))-1
-                    dmp[i]['releases'][j]['platform'] = dmp[i]['releases'][j]['platforms'][k]
-            del dmp[i]['releases'][j]['platforms']
-            j += 1
-        if not len(dmp[i]['releases']):
-            del dmp[i]
-            continue
-        i += 1
+                        info['bname'][i] = tmp
+                    tmp = special_game_title(info['gname'][i])
+                    if tmp is None:
+                        info['gname'][i] = special_chars_to_full_width(info['gname'][i])
+                    else:
+                        info['gname'][i] = tmp
+                    i += 1
+                    continue
+                elif info['possession'][i] is None:
+                    print(f'"possession = None" met! - Title: {info["gname"][i]}')
+                for agg_col in ['gid', 'vid', 'gname', 'model', 'possession']:
+                    del info[agg_col][i]
+            if len(info['gid']) == 0:
+                to_del.append(bid)
+        for bid in to_del:
+            del dmp_egs[bid]
+    elif dmp_vndb:
+        pass # don't care atm thx for asking
+
+    # i = 0
+    # while i < len(dmp):
+    #     if dmp[i]['title'] != special_visual_title(dmp[i]['title'], dmp[i]['id']):
+    #         dmp[i]['title'] = special_visual_title(dmp[i]['title'], dmp[i]['id'])
+    #     else:
+    #         if dmp[i]['title'].count('"') % 2 == 1:
+    #             print(f"{dmp[i]['title']} contains an odd number of quotes. Skipping novel!")
+    #             del dmp[i]
+    #             continue
+    #         else:
+    #             dmp[i]['title'] = special_chars_to_full_width(dmp[i]['title'])
+    #     j = 0
+    #     while j < len(dmp[i]['releases']):
+    #         if dmp[i]['releases'][j]['title'] != special_visual_title(dmp[i]['releases'][j]['title'], dmp[i]['releases'][j]['id']):
+    #             dmp[i]['releases'][j]['title'] = special_visual_title(dmp[i]['releases'][j]['title'], dmp[i]['releases'][j]['id'])
+    #         else:
+    #             c = dmp[i]['releases'][j]['title'].count('"')
+    #             if c == 0:
+    #                 dmp[i]['releases'][j]['title'] = special_chars_to_full_width(dmp[i]['releases'][j]['title'])
+    #             elif c % 2 == 1:
+    #                 print(f"{dmp[i]['releases'][j]['title']} contains an odd number of quotes. Skipping release!")
+    #                 del dmp[i]['releases'][j]
+    #                 continue
+    #             else:
+    #                 qInfo = [all([q in dmp[i]['title'] for q in quotes]) for quotes in dquotes]
+    #                 # two dynamic qInfo.index(True) will remove cost of any(), reduce() and index()
+    #                 if any(qInfo):
+    #                     if not reduce(operator.xor, qInfo):
+    #                         print(f"{dmp[i]['title']} novel contains mixed quotes. Skipping {dmp[i]['releases'][j]['title']} release!")
+    #                         del dmp[i]['releases'][j]
+    #                         continue
+    #                     else:
+    #                         dmp[i]['releases'][j]['title'] = special_chars_to_full_width(dmp[i]['releases'][j]['title'], dquotes[qInfo.index(True)])
+    #                 else:
+    #                     # replacement can't be determined. using default
+    #                     # happens when novel didn't have quotes but release does ???
+    #                     dmp[i]['releases'][j]['title'] = special_chars_to_full_width(dmp[i]['releases'][j]['title'])
+    #         if 'win' in dmp[i]['releases'][j]['platforms']:
+    #             dmp[i]['releases'][j]['platform'] = 'win'
+    #         else:
+    #             if len(dmp[i]['releases'][j]['platforms']) == 1:
+    #                 dmp[i]['releases'][j]['platform'] = dmp[i]['releases'][j]['platforms'][0]
+    #             else:
+    #                 print(dmp[i]['title'])
+    #                 print(dmp[i]['releases'][j]['title'])
+    #                 for k in range(len(dmp[i]['releases'][j]['platforms'])):
+    #                     print(f"{k+1})  {dmp[i]['releases'][j]['platforms'][k]}")
+    #                 k = int(input('Please input the number of which platform to use:\n>'))-1
+    #                 dmp[i]['releases'][j]['platform'] = dmp[i]['releases'][j]['platforms'][k]
+    #         del dmp[i]['releases'][j]['platforms']
+    #         j += 1
+    #     if not len(dmp[i]['releases']):
+    #         del dmp[i]
+    #         continue
+    #     i += 1
 
 
-def write_structure(db, icons=False, prev_db=None, cv_path=None):
+def write_structure(dmp_egs=None, dmp_vndb=None, icons=False, prev_db=None, cv_path=None):
     #   mk,ln(src,dst) rename src     rename dst   icons
     # ( ([], [], []) , ([], [], []) , ([], [], []) , [])
     dirs = (([], [], []), ([], [], []), ([], [], []), [])
@@ -520,14 +559,14 @@ def main():
             raise ValueError
 
         if prev_dump:
-            choice = 1
+            choice = 0
         else:
             msg = f'{dump.name}:'
             choices = ['Use downloaded dump',
                       'Download latest dump and save it',
                       'Download latest dump but don\'t save it']
             choice = ask(msg, choices=choices)
-            while not 0 < choice < 4:
+            while not -1 < choice < 3:
                 print()
                 choice = ask(msg, choices=choices)
 
@@ -537,51 +576,50 @@ def main():
         elif dump == dumps.EGS:
             ls = list(filter(lambda x: 'egs' in x and 'json' in x and 'bg' in x, ls))
 
-        if choice == 1 and len(ls) == 0:
+        if choice == 0 and len(ls) == 0:
             print(f'Couldn\'t find local {dump.name} dump.')
             if prev_dump:
                 print('Won\'t use a previous dump.')
                 return None
-            else:
-                print('Falling back to downloading and saving.')
-            choice = 2
-        if choice == 1:
+            print('Falling back to downloading and saving.')
+            choice = 1
+        if choice == 0:
             if prev_dump:
                 msg = 'Choose previous dump:'
                 i = ask(msg, choices=ls, no_choice=True)
-                while -1 < i < len(ls):
+                while not -2 < i < len(ls):
                     i = ask(msg, choices=ls, no_choice=True)
+                if i == -1:
+                    return None
             else:
                 msg = 'Choose current dump'
                 i = ask(msg, choices=ls, no_choice=False)
-                while -2 < i < len(ls):
+                while not -1 < i < len(ls):
                     i = ask(msg, choices=ls, no_choice=False)
-                if i == -1:
-                    return None
             with open(ls[i], 'r', encoding='utf-8') as f:
                 dmp = json.load(f)
-        elif choice == 2 or choice == 3:
+        elif choice == 1 or choice == 2:
             if dump == dumps.VNDB:
                 dmp = VNDB_API.dump(False)
             elif dump == dumps.EGS:
                 dmp = EGS_SQL.dump('ubg')
-        if choice == 2:
+        if choice == 1:
             if dump == dumps.VNDB:
-                dmp = VNDB_API.write_dump(False, dmp=dmp)
+                VNDB_API.write_dump(False, dmp=dmp)
             elif dump == dumps.EGS:
-                dmp = EGS_SQL.write_dump('ubg', dmp=dmp)
+                EGS_SQL.write_dump('ubg', dmp=dmp)
         return dmp
 
     cdmp_egs = None
     pdmp_egs = None
-    if not input('Use EGS? empty for Y anything for N\n>'):
+    if not bool(input('Use EGS? empty for Y anything for N\n>')):
         cdmp_egs = read_dump(dumps.EGS)
         pdmp_egs = read_dump(dumps.EGS, prev_dump=True)
 
     cv_path = None
     cdmp_vndb = None
     pdmp_vndb = None
-    if input('Use VNDB? empty for N anything for Y\n>'):
+    if bool(input('Use VNDB? empty for N anything for Y\n>')):
         cdmp_vndb = read_dump(dumps.VNDB)
         pdmp_vndb = read_dump(dumps.VNDB, prev_dump=True)
         if not bool(input('Create icons for folders? empty for Y anything for N\n>')):
@@ -589,9 +627,10 @@ def main():
             if not cv_path:
                 cv_path = None
 
-        ready_dump()
-        write_structure(dbc, icons, prev_db=dbp, cv_path=cv_path)
-        input()
+    ready_dump(dmp_egs=cdmp_egs, dmp_vndb=cdmp_vndb)
+    ready_dump(dmp_egs=pdmp_egs, dmp_vndb=pdmp_vndb)
+    write_structure(dbc, icons, prev_db=dbp, cv_path=cv_path)
+    input()
 
 
 if __name__ == '__main__':

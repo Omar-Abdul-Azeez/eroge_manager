@@ -79,7 +79,7 @@ def write_dump(full_backup, dmp=None):
 
 def main():
     try:
-        full_backup = bool(input('Dump entire userlist?\n>'))
+        full_backup = bool(input('Dump entire userlist? Empty for N anything for Y\n>'))
         write_dump(full_backup)
     except Exception as e:
         print(e)
