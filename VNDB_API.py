@@ -2,6 +2,9 @@ import json
 from datetime import date
 
 import requests
+from natsort import natsorted
+
+from walklevel import walklevel
 
 
 def dump(full_backup):
@@ -75,6 +78,11 @@ def write_dump(full_backup, dmp=None):
     with open(f'vndb{"-full_backup" if full_backup else ""}-{date.today().strftime("%Y-%m-%d")}.json', 'w',
               encoding='utf-8') as f:
         json.dump(dmp, f, ensure_ascii=False)
+
+
+def local_dumps(full_backup):
+    return filter(lambda x: f'vndb{"-full_backup-" if full_backup else ""}' in x and '.json' in x,
+                  natsorted(next(walklevel('.'))[2]))
 
 
 def main():

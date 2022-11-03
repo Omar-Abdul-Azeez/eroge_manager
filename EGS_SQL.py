@@ -4,6 +4,9 @@ from datetime import date
 
 import requests
 from bs4 import BeautifulSoup
+from natsort import natsorted
+
+from walklevel import walklevel
 
 
 def dump(sql_table):
@@ -171,10 +174,12 @@ def dump(sql_table):
             try:
                 s = dmp[values[0]]['possession']
                 if s[0] == '{' and s[-1] == '}':
-                    dmp[values[0]]['possession'] = list(map(lambda x: True if x == 't' else False if x == 'f' else None, s[1:-1].split(',')))
+                    dmp[values[0]]['possession'] = list(
+                        map(lambda x: True if x == 't' else False if x == 'f' else None, s[1:-1].split(',')))
             except Exception as e:
                 pass
-            for agg_col in ['gid','vid','gname','model','bid','bname','bundled_in','bundle_of','appends','append_to']:
+            for agg_col in ['gid', 'vid', 'gname', 'model', 'bid', 'bname', 'bundled_in', 'bundle_of', 'appends',
+                            'append_to']:
                 try:
                     s = dmp[values[0]][agg_col]
                     if s[0] == '{' and s[-1] == '}':
@@ -195,6 +200,10 @@ def write_dump(sql_table, dmp=None):
         dmp = dump(sql_table)
     with open(f'egs-{sql_table}-{date.today().strftime("%Y-%m-%d")}.json', 'w', encoding='utf-8') as f:
         json.dump(dmp, f, ensure_ascii=False)
+
+
+def local_dumps(sql_table):
+    return filter(lambda x: f'egs-{sql_table}-' in x and '.json' in x, natsorted(next(walklevel('.'))[2]))
 
 
 def main():
