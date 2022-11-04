@@ -6,8 +6,16 @@ from json import load
 
 from deepdiff import DeepDiff
 
-import EGS_SQL
-import VNDB_API
+try:
+    import EGS_SQL
+    EGS_available = True
+except ImportError as e:
+    EGS_available = False
+try:
+    import VNDB_API
+    VNDB_available = True
+except ImportError as e:
+    VNDB_available = False
 from walklevel import walklevel
 
 
@@ -926,7 +934,7 @@ def main():
                 EGS_SQL.write_dump('ubg', dmp=dmp)
         return dmp
 
-    if not bool(input('Use EGS? empty for Y anything for N\n>')):
+    if EGS_available and not bool(input('Use EGS? empty for Y anything for N\n>')):
         cdmp_egs = read_dump(dumps.EGS, user=egs_user)
         pdmp_egs = read_dump(dumps.EGS, prev_dump=True)
     else:
@@ -934,7 +942,7 @@ def main():
         pdmp_egs = dict()
 
     cv_path = None
-    if bool(input('Use VNDB? empty for N anything for Y\n>')):
+    if VNDB_available and bool(input('Use VNDB? empty for N anything for Y\n>')):
         cdmp_vndb = read_dump(dumps.VNDB, user=vndb_user)
         pdmp_vndb = read_dump(dumps.VNDB, prev_dump=True)
         if not bool(input('Create icons for folders? empty for Y anything for N\n>')):
@@ -961,16 +969,22 @@ def main():
             pdmp = pdmp_egs
         else:
             pdmp = infer_dump(dumps.EGS)
-    else:
+    elif len(cdmp_vndb) != 0:
         cdmp = cdmp_vndb
         if len(pdmp_vndb) != 0:
             pdmp = pdmp_vndb
         else:
             pdmp = infer_dump(dumps.VNDB)
+    else:
+        print('Require either EGS or VNDB. Please provide.')
+        input()
+        return
+
     diff_dmp = DeepDiff(pdmp, cdmp, exclude_regex_paths=[r"root\['\d+']\['g']\['\d+']\['vid']",
                                                          r"root\['\d+']\['g']\['\d+']\['model']"], ignore_order=True,
                         view='tree')
     write_structure(diff_dmp, modes.DRYRUN, skip=skip, cv_path=cv_path)
+    input()
     write_structure(diff_dmp, modes.NORMAL, skip=skip, cv_path=cv_path)
     input()
 
