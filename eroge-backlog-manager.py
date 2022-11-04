@@ -913,7 +913,7 @@ def main():
                 dmp = load(f)
         elif choice == 1 or choice == 2:
             if user is None:
-                msg = f'{dump} user:'
+                msg = f'{dump.name} user:'
                 user = ask(msg)
             if dump == dumps.VNDB:
                 dmp = VNDB_API.dump(user, False)
