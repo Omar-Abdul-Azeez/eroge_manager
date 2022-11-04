@@ -225,6 +225,11 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
     if skip is None:
         skip = []
 
+    def pretty(lod, indent=0):
+        if len(lod) == 0:
+            return 'None'
+        return ('\n' + ' ' * indent).join(map(str, lod))
+
     badds = []
     gadds = []
     try:
@@ -479,35 +484,37 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
             print('An error occured while rolling back changes...（；ﾟдﾟ）ﾔﾍﾞｪ')
             double_trouble = True
 
-    print(f'Planned changes:'
-          f'  Brand: {sum(count[0])}'
-          f'    Additions: {count[0][0]}'
-          f'    Changes: {count[0][1]}'
-          f'    Deletions: {count[0][2]}'
-          f'  Game: {sum(count[1])}'
-          f'    Additions: {count[1][0]}'
-          f'    Changes: {count[1][1]}'
-          f'    Deletions: {count[1][2]}')
-    with [map(len, change) for change in changes] as count_r:
-        print(f'Carried out changes:'
-              f'  Brand: {sum(count_r[0])}'
-              f'    Additions: {count_r[0][0]}'
-              f'    Changes: {count_r[0][1]}'
-              f'    Deletions: {count_r[0][2]}'
-              f'  Game: {sum(count_r[1])}'
-              f'    Additions: {count_r[1][0]}'
-              f'    Changes: {count_r[1][1]}'
-              f'    Deletions: {count_r[1][2]}')
+    print(f'Planned changes:\n'
+          f'  Brand: {sum(count[0])}\n'
+          f'    Additions: {count[0][0]}\n'
+          f'    Changes: {count[0][1]}\n'
+          f'    Deletions: {count[0][2]}\n'
+          f'  Game: {sum(count[1])}\n'
+          f'    Additions: {count[1][0]}\n'
+          f'    Changes: {count[1][1]}\n'
+          f'    Deletions: {count[1][2]}\n'
+          f'  Total: {sum(map(sum, count))}')
+    count_r = [list(map(len, change)) for change in changes]
+    print(f'Carried out changes:\n'
+          f'  Brand: {sum(count_r[0])}\n'
+          f'    Additions: {count_r[0][0]}\n'
+          f'    Changes: {count_r[0][1]}\n'
+          f'    Deletions: {count_r[0][2]}\n'
+          f'  Game: {sum(count_r[1])}\n'
+          f'    Additions: {count_r[1][0]}\n'
+          f'    Changes: {count_r[1][1]}\n'
+          f'    Deletions: {count_r[1][2]}\n'
+          f'  Total: {sum(map(sum, count_r))}')
     if double_trouble:
-        print(f'Couldn\'t rollback:'
-              f'  Brand:'
-              f'    Additions: {changes[0][0]}'
-              f'    Changes: {changes[0][1]}'
-              f'    Deletions: {changes[0][2]}'
-              f'  Game:'
-              f'    Addititons: {changes[1][0]}'
-              f'    Changes: {changes[1][1]}'
-              f'    Deletions: {changes[1][2]}')
+        print(f'Couldn\'t rollback:\n'
+              f'  Brand:\n'
+              f'    Additions: {pretty(changes[0][0], indent=15)}\n'
+              f'    Changes: {pretty(changes[0][1], indent=13)}\n'
+              f'    Deletions: {pretty(changes[0][2], indent=15)}\n'
+              f'  Game:\n'
+              f'    Additions: {pretty(changes[1][0], indent=15)}\n'
+              f'    Changes: {pretty(changes[1][1], indent=13)}\n'
+              f'    Deletions: {pretty(changes[1][2], indent=15)}\n')
 
     # def mk_cover(game, id, cv, url):
     #     path = f'{game}{os.sep}'
@@ -980,7 +987,7 @@ def main():
         else:
             pdmp = infer_dump(dumps.VNDB)
     else:
-        print('Require either EGS or VNDB. Please provide.')
+        print('Requires either EGS or VNDB. Please provide.')
         input()
         return
 
