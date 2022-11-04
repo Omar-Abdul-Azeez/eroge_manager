@@ -38,7 +38,7 @@ def ask(msg, choices: list = None, no_choice: bool = False):
 dquotes = [('「', '」'), ('『', '』'), ('“', '”')]
 # special edits
 del_g = []
-del_b = ['(ビジネスパートナー)']
+del_b = []
 del_v = []
 del_r = []
 sg = {}
@@ -840,6 +840,9 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
 
 
 def main():
+    egs_user = None
+    vndb_user = None
+
     def infer_dump(type):
         if type != dumps.EGS:
             return dict()  # don't care atm thx for asking
@@ -864,7 +867,7 @@ def main():
 
         return dmp
 
-    def read_dump(dump, prev_dump=False):
+    def read_dump(dump, user=None, prev_dump=False):
         if not isinstance(dump, dumps):
             raise TypeError
         if dump == dumps.EGS_VNDB:
@@ -909,10 +912,13 @@ def main():
             with open(ls[i], 'r', encoding='utf-8') as f:
                 dmp = load(f)
         elif choice == 1 or choice == 2:
+            if user is None:
+                msg = f'{dump} user:'
+                user = ask(msg)
             if dump == dumps.VNDB:
-                dmp = VNDB_API.dump(False)
+                dmp = VNDB_API.dump(user, False)
             elif dump == dumps.EGS:
-                dmp = EGS_SQL.dump('ubg')
+                dmp = EGS_SQL.dump(user, 'ubg')
         if choice == 1:
             if dump == dumps.VNDB:
                 VNDB_API.write_dump(False, dmp=dmp)
@@ -921,7 +927,7 @@ def main():
         return dmp
 
     if not bool(input('Use EGS? empty for Y anything for N\n>')):
-        cdmp_egs = read_dump(dumps.EGS)
+        cdmp_egs = read_dump(dumps.EGS, user=egs_user)
         pdmp_egs = read_dump(dumps.EGS, prev_dump=True)
     else:
         cdmp_egs = dict()
@@ -929,7 +935,7 @@ def main():
 
     cv_path = None
     if bool(input('Use VNDB? empty for N anything for Y\n>')):
-        cdmp_vndb = read_dump(dumps.VNDB)
+        cdmp_vndb = read_dump(dumps.VNDB, user=vndb_user)
         pdmp_vndb = read_dump(dumps.VNDB, prev_dump=True)
         if not bool(input('Create icons for folders? empty for Y anything for N\n>')):
             cv_path = input('VNDB covers dump path: leave empty to download covers\n>')

@@ -9,8 +9,8 @@ from natsort import natsorted
 from walklevel import walklevel
 
 
-def dump(sql_table):
-    sql = """WITH
+def dump(user, sql_table):
+    sql = f"""WITH
     gb AS (SELECT gamelist.id as gid,
                   gamelist.vndb as vid,
                   gamename as gname,
@@ -37,7 +37,7 @@ def dump(sql_table):
     u AS (SELECT game,
                  possession
             FROM userreview
-                WHERE uid = 'Karasaru'
+                WHERE uid = '{user}'
             ORDER BY game
          ),
     ugb AS (SELECT gamelist.id as gid,
@@ -195,9 +195,11 @@ def dump(sql_table):
     return dmp
 
 
-def write_dump(sql_table, dmp=None):
+def write_dump(sql_table, user=None, dmp=None):
+    if user is None and dmp is None:
+        raise ValueError
     if dmp is None:
-        dmp = dump(sql_table)
+        dmp = dump(user, sql_table)
     with open(f'egs-{sql_table}-{date.today().strftime("%Y-%m-%d")}.json', 'w', encoding='utf-8') as f:
         json.dump(dmp, f, ensure_ascii=False)
 
@@ -207,6 +209,8 @@ def local_dumps(sql_table):
 
 
 def main():
+    user = None
+
     def ask_sql_table():
         print("u = userlist(gid + possession)だけ\n"
               "gb = game + brand\n"
@@ -223,7 +227,9 @@ def main():
     while sql_table not in sql_tables:
         print()
         sql_table = ask_sql_table()
-    write_dump(sql_table)
+    if user is None:
+        user = input('user:\n>')
+    write_dump(sql_table, user=user)
 
 
 if __name__ == '__main__':

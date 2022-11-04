@@ -7,7 +7,7 @@ from natsort import natsorted
 from walklevel import walklevel
 
 
-def dump(full_backup):
+def dump(user, full_backup):
     if full_backup:
         enm = ['Unknown', 'Pending', 'Obtained', 'On loan', 'Deleted']
         req = {
@@ -18,7 +18,7 @@ def dump(full_backup):
             "filters": ["or", ["label", "=", "10"], ["label", "=", "11"], ["label", "=", "13"]],
             "fields": "id, vn{title, alttitle, image{id, url}}, releases{list_status, id, title, alttitle, platforms, vns.id, patch}"
         }
-    req['user'] = 'u192153'
+    req['user'] = user
     req['results'] = 100
     i = 0
     dmp = dict()
@@ -72,9 +72,11 @@ def dump(full_backup):
     return dmp
 
 
-def write_dump(full_backup, dmp=None):
-    if not dmp:
-        dmp = dump(full_backup)
+def write_dump(full_backup, user=None, dmp=None):
+    if user is None and dmp is None:
+        raise ValueError
+    if dmp is None:
+        dmp = dump(user, full_backup)
     with open(f'vndb{"-full_backup" if full_backup else ""}-{date.today().strftime("%Y-%m-%d")}.json', 'w',
               encoding='utf-8') as f:
         json.dump(dmp, f, ensure_ascii=False)
@@ -86,9 +88,12 @@ def local_dumps(full_backup):
 
 
 def main():
+    user = None
     try:
         full_backup = bool(input('Dump entire userlist? Empty for N anything for Y\n>'))
-        write_dump(full_backup)
+        if user is None:
+            user = input('user:\n>')
+        write_dump(full_backup, user=user)
     except Exception as e:
         print(e)
         input()
