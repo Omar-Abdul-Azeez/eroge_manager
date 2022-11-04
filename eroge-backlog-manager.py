@@ -861,7 +861,9 @@ def main():
         next(walkie)
         for dir, _, files in walkie:
             name = dir[2:]
-            bid = next(filter(lambda x: '.' not in x, files))
+            bid = next(filter(lambda x: '.' not in x, files), None)
+            if bid is None:
+                continue
             dmp[bid] = dict()
             dmp[bid]['name'] = name
             dmp[bid]['g'] = dict()
@@ -869,7 +871,9 @@ def main():
             next(talkie)
             for dir2, _, files2 in talkie:
                 title = dir2.split(name, maxsplit=1)[1]
-                gid = next(filter(lambda x: '.' not in x, files2))
+                gid = next(filter(lambda x: '.' not in x, files2), None)
+                if gid is None:
+                    continue
                 dmp[bid]['g'][gid] = dict()
                 dmp[bid]['g'][gid]['name'] = title
 
