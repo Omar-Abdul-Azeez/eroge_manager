@@ -68,11 +68,10 @@ if skip_str != '':
 
 def special_chars_to_full_width(string, dquotes=dquotes[2]):
     # \/:*?"<>|
-    # WON'T REPLACE <> NOR TRAILING PERIODS AND F NTFS (actually haven't encountered yet（；ﾟдﾟ）ｺﾁｺﾁ)
+    # WON'T REPLACE <> AND F NTFS (actually haven't encountered yet（；ﾟдﾟ）ｺﾁｺﾁ)
     if string[-1] == '.':
-        print(f'TRAILING PERIOD（；ﾟдﾟ）ﾋｨｨｨ Title: {string}')
-        input()
-        raise ValueError
+        # print(f'TRAILING PERIOD（；ﾟдﾟ）ﾋｨｨｨ Title: {string}')
+        string = string[:-1]
     lis = []
     flag = False
     for c in string:
