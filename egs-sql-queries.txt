@@ -25,7 +25,7 @@ bg AS (SELECT brandlist.id as bid,
 u AS (SELECT game,
              possession
         FROM userreview
-            WHERE uid = 'Karasaru'
+            WHERE uid = ''
         ORDER BY game
      ),
 ugb AS (SELECT gamelist.id as gid,

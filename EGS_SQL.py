@@ -184,11 +184,20 @@ def dump(user, sql_table):
                     s = dmp[values[0]][agg_col]
                     if s[0] == '{' and s[-1] == '}':
                         tmp = s[1:-1].split(',')
-                        for z in range(len(tmp)):
-                            if ' ' in tmp[z] and tmp[z][0] == '"' and tmp[z][-1] == '"':
-                                tmp[z] = tmp[z][1:-1]
-                            if tmp[z] == 'NULL':
-                                tmp[z] = None
+                        i = 0
+                        while i < len(tmp):
+                            if tmp[i] == 'NULL':
+                                tmp[i] = None
+                            elif ' ' in tmp[i] and tmp[i][0] == '"' and tmp[i][-1] == '"':
+                                tmp[i] = tmp[i][1:-1]
+                            elif ' ' in tmp[i] and tmp[i][0] == '"':
+                                try:
+                                    tmp[i+1] = tmp[i] + tmp[i+1]
+                                    del tmp[i]
+                                    continue
+                                except IndexError as e:
+                                    pass
+                            i += 1
                         dmp[values[0]][agg_col] = tmp
                 except Exception as e:
                     pass
