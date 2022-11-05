@@ -483,6 +483,7 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
             print('An error occured while rolling back changes...（；ﾟдﾟ）ﾔﾍﾞｪ')
             double_trouble = True
 
+    print()
     print(f'Planned changes:\n'
           f'  Brand: {sum(count[0])}\n'
           f'    Additions: {count[0][0]}\n'
@@ -493,6 +494,7 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
           f'    Changes: {count[1][1]}\n'
           f'    Deletions: {count[1][2]}\n'
           f'  Total: {sum(map(sum, count))}')
+    print()
     count_r = [list(map(len, change)) for change in changes]
     print(f'Carried out changes:\n'
           f'  Brand: {sum(count_r[0])}\n'
@@ -505,6 +507,7 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
           f'    Deletions: {count_r[1][2]}\n'
           f'  Total: {sum(map(sum, count_r))}')
     if double_trouble:
+        print()
         print(f'Couldn\'t rollback:\n'
               f'  Brand:\n'
               f'    Additions: {pretty(changes[0][0], indent=15)}\n'
@@ -863,7 +866,7 @@ def main():
 
         print('Inferring previous dump data from folder structure...')
         dmp = dict()
-        walkie = walklevel('.', depth=2)
+        walkie = walklevel('.', depth=1)
         next(walkie)
         for dir, _, files in walkie:
             name = dir[2:]
@@ -873,10 +876,10 @@ def main():
             dmp[bid] = dict()
             dmp[bid]['name'] = name
             dmp[bid]['g'] = dict()
-            talkie = walklevel(os.sep.join(['.', name]), depth=2)
+            talkie = walklevel(os.sep.join(['.', name]), depth=1)
             next(talkie)
             for dir2, _, files2 in talkie:
-                title = dir2.split(name, maxsplit=1)[1]
+                title = dir2.rsplit(os.sep, maxsplit=1)[1]
                 gid = next(filter(lambda x: '.' not in x, files2), None)
                 if gid is None:
                     continue
