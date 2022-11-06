@@ -1,12 +1,18 @@
 # -*- encoding:utf-8 -*-
 import json
-from datetime import date
+from datetime import datetime
+from os.path import join
 
+import regex
 import requests
 from bs4 import BeautifulSoup
 from natsort import natsorted
 
-from walklevel import walklevel
+import helper
+
+sql_tables = ['u', 'gb', 'ugb', 'bg', 'ubg', 'ugrgb', 'kankei', 'ugbkankei']
+save_format = r'EGS-{sql_table}-{date}'
+regex_pattern = r'$EGS-{sql_table}-\d{4}(-\d\d){2}T\d{6}Z\.json^'
 
 
 def dump(user, sql_table):
@@ -163,25 +169,25 @@ def dump(user, sql_table):
     table = soup.find('div', attrs={'id': 'query_result_main'}).find('table')
     rows = iter(table)
     next(rows)
-    headers = [col.text for col in next(rows)][1:]
-    dmp = dict()
+    headers = [col.text for col in next(rows)]
+    dmp = [save_format.format(sql_table=sql_table, date=datetime.utcnow().strftime("%Y-%m-%dT%H%M%SZ"))]
     for row in rows:
         if row == '\n':
             continue
         values = [col.text for col in row]
-        dmp[values[0]] = dict(zip(headers, values[1:]))
+        dmp.append(dict(zip(headers, values)))
         if sql_table in ['bg', 'ubg', 'ugrgb', 'ugbkankei']:
             try:
-                s = dmp[values[0]]['possession']
+                s = dmp[-1]['possession']
                 if s[0] == '{' and s[-1] == '}':
-                    dmp[values[0]]['possession'] = list(
+                    dmp[-1]['possession'] = list(
                         map(lambda x: True if x == 't' else False if x == 'f' else None, s[1:-1].split(',')))
-            except Exception as e:
+            except:
                 pass
             for agg_col in ['gid', 'vid', 'gname', 'model', 'bid', 'bname', 'bundled_in', 'bundle_of', 'appends',
                             'append_to']:
                 try:
-                    s = dmp[values[0]][agg_col]
+                    s = dmp[-1][agg_col]
                     if s[0] == '{' and s[-1] == '}':
                         tmp = s[1:-1].split(',')
                         i = 0
@@ -192,35 +198,54 @@ def dump(user, sql_table):
                                 tmp[i] = tmp[i][1:-1]
                             elif ' ' in tmp[i] and tmp[i][0] == '"':
                                 try:
-                                    tmp[i+1] = tmp[i] + tmp[i+1]
+                                    tmp[i + 1] = tmp[i] + tmp[i + 1]
                                     del tmp[i]
                                     continue
                                 except IndexError as e:
                                     pass
                             i += 1
-                        dmp[values[0]][agg_col] = tmp
-                except Exception as e:
+                        dmp[-1][agg_col] = tmp
+                except:
                     pass
     return dmp
 
 
-def write_dump(sql_table, user=None, dmp=None):
-    if user is None and dmp is None:
+def write_dump(user=None, sql_table=None, dmp=None, root='.'):
+    if (user is None or sql_table is None) and dmp is None:
         raise ValueError
     if dmp is None:
         dmp = dump(user, sql_table)
-    with open(f'egs-{sql_table}-{date.today().strftime("%Y-%m-%d")}.json', 'w', encoding='utf-8') as f:
+    with open(join(root, dmp[0] + '.json'), 'w', encoding='utf-8') as f:
         json.dump(dmp, f, ensure_ascii=False)
 
 
-def local_dumps(sql_table):
-    return filter(lambda x: f'egs-{sql_table}-' in x and '.json' in x, natsorted(next(walklevel('.'))[2]))
+def local_dumps(sql_table, root='.'):
+    return natsorted(filter(lambda x: regex.match(regex_pattern.replace('{sql_table}', sql_table), x) is not None,
+                            next(helper.walklevel(root))[2]))
 
 
-def main():
-    user = None
+def get_dump(sql_table, root='.', can_dl=False, user=None, none=False):
+    ls = list(local_dumps(sql_table, root=root))
+    if can_dl:
+        ls.append('Download latest dump')
+    if len(ls) == 0:
+        return None
+    else:
+        ans = helper.ask('Choose dump:', choices=ls, show=True, none=none)
+        if ans is None:
+            return None
+        elif ans == 'Download latest dump':
+            if user is None:
+                user = helper.ask('user:')
+            return dump(user, sql_table)
+        else:
+            with open(ans, 'r', encoding='utf-8') as f:
+                return json.load(f)
 
-    def ask_sql_table():
+
+def ask_sql_table():
+    sql_table = helper.ask('SQL Table:', choices=sql_tables)
+    while sql_table not in sql_tables:
         print("u = userlist(gid + possession)だけ\n"
               "gb = game + brand\n"
               "ugb = userlistの game + brand\n"
@@ -229,15 +254,15 @@ def main():
               "ugrgb = userlistの group + array_agg(game) + array_agg(brand)\n"
               "kankei = kankei WHERE kind IN ('apend','bundling')\n"
               "ugbkankei = userlistの game + brand + array_agg(bundle_of) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends))")
-        return input('SQL Table:\n>')
+        sql_table = helper.ask('SQL Table', choices=sql_tables)
+    return sql_table
 
-    sql_tables = ['u', 'gb', 'ugb', 'bg', 'ubg', 'ugrgb', 'kankei', 'ugbkankei']
-    sql_table = ask_sql_table()
-    while sql_table not in sql_tables:
-        print()
-        sql_table = ask_sql_table()
+
+def main():
+    user = None
     if user is None:
-        user = input('user:\n>')
+        user = helper.ask('user:')
+    sql_table = ask_sql_table()
     write_dump(sql_table, user=user)
 
 

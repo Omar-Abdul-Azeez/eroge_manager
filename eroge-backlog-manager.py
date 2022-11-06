@@ -1,44 +1,33 @@
 # -*- encoding:utf-8 -*-
 import os
 import shutil
-from enum import Enum
-from json import load
 
+import regex
 from deepdiff import DeepDiff
+from deepdiff.helper import CannotCompare
+
+from enums import *
 
 try:
     import EGS_SQL
+
     EGS_available = True
-except ImportError as e:
+except ImportError as _:
     EGS_available = False
 try:
     import VNDB_API
+
     VNDB_available = True
-except ImportError as e:
+except ImportError as _:
     VNDB_available = False
-from walklevel import walklevel
+import helper
 
 
-class dumps(Enum):
-    EGS = 'egs'
-    VNDB = 'vndb'
-    EGS_VNDB = 'egs + vndb'
-
-
-class modes(Enum):
-    NORMAL = 'normal'
-    DRYRUN = 'dryrun'
-
-
-def ask(msg, choices: list = None, no_choice: bool = False):
-    print(msg)
-    if choices is not None:
-        if no_choice:
-            print('1)  None')
-        for i in range(len(choices)):
-            print(f'{i + (2 if no_choice else 1)})  {choices[i]}')
-        return int(input('>')) - (2 if no_choice else 1)
-    return input('>')
+def compare_func(x, y, level=None):
+    try:
+        return x['id'] == y['id']
+    except Exception:
+        raise CannotCompare() from None
 
 
 # EXTRAS = ['壁紙', 'イラスト', 'レーベル', 'ジャケット', 'マニュアル', 'アイコン', 'ヘッダー', 'あざらしWalker']
@@ -53,17 +42,21 @@ sg = {}
 sb = {}
 sv = {'v3182': 'SHANGRLIA'}
 sr = {}
-skip = set()
-skip_str = ''
-# parse skip_str
-if skip_str != '':
-    ls = skip_str.split(' ')
+
+
+def parse_skip_str(s):
+    if regex.match(r'$(\d+\-\d+|\d+)( (\d+\-\d+|\d+))*^', s) is None:
+        return None
+    else:
+        skip = set()
+        ls = s.split(' ')
     for i in range(len(ls)):
         if '-' in ls[i]:
             spl = ls[i].split('-')
             skip.add(set(range(int(spl[0]), int(spl[1]) + 1)))
         else:
             skip.add(int(ls[i]))
+    return skip
 
 
 def special_chars_to_full_width(string, dquotes=dquotes[2]):
@@ -112,52 +105,55 @@ def special_release_title(t, id):
     return t
 
 
-def clean_egs(dmp):
-    to_del = []
-    for bid, info in dmp.items():
-        title = sb.get(bid)
-        if title is None:
-            for del_name in del_b:
-                info['bname'] = info['bname'].replace(del_name, '')
-            info['name'] = special_chars_to_full_width(info['bname'])
-        else:
-            info['name'] = title
-        del info['bname']
-        i = 0
-        info['g'] = dict()
-        while i < len(info['gid']):
-            if info['possession'][i]:
-                title = sg.get(info['gname'][i])
-                if title is None:
-                    for del_name in del_g:
-                        info['gname'][i] = info['gname'].replace(del_name, '')
-                    info['gname'][i] = special_chars_to_full_width(info['gname'][i])
-                else:
-                    info['gname'][i] = title
-                info['g'][info['gid'][i]] = {'vid': info['vid'][i],
-                                             'name': info['gname'][i],
-                                             'model': info['model'][i]
-                                             }
+def clean_dump(type, dmp):
+    if type == Types.EGS:
+
+        i = 1
+        while i < len(dmp):
+            bid = dmp[i]['bid']
+            del dmp[i]['bid']
+            dmp[i]['id'] = bid
+            title = sb.get(bid)
+            if title is None:
+                for del_name in del_b:
+                    dmp[i]['bname'] = dmp[i]['bname'].replace(del_name, '')
+                dmp[i]['name'] = special_chars_to_full_width(dmp[i]['bname'])
+            else:
+                dmp[i]['name'] = title
+            del dmp[i]['bname']
+            j = 0
+            dmp[i]['g'] = []
+            while j < len(dmp[i]['gid']):
+                if dmp[i]['possession'][j]:
+                    title = sg.get(dmp[i]['gname'][j])
+                    if title is None:
+                        for del_name in del_g:
+                            dmp[i]['gname'][j] = dmp[i]['gname'].replace(del_name, '')
+                        dmp[i]['gname'][j] = special_chars_to_full_width(dmp[i]['gname'][j])
+                    else:
+                        dmp[i]['gname'][j] = title
+                    dmp[i]['g'].append({'id': dmp[i]['gid'][j],
+                                        'vid': dmp[i]['vid'][j],
+                                        'name': dmp[i]['gname'][j],
+                                        'model': dmp[i]['model'][j]
+                                        })
+                    j += 1
+                    continue
+                elif dmp[i]['possession'][j] is None:
+                    print(f'"possession = None" met! - Title: {dmp[i]["gname"][j]}')
+                del dmp[i]['gid'][j]
+            if len(dmp[i]['gid']) == 0:
+                del dmp[i]
+            else:
+                for agg_col in ['gid', 'vid', 'gname', 'model', 'possession']:
+                    del dmp[i][agg_col]
                 i += 1
-                continue
-            elif info['possession'][i] is None:
-                print(f'"possession = None" met! - Title: {info["gname"][i]}')
-            del info['gid'][i]
-        if len(info['gid']) == 0:
-            to_del.append(bid)
-        else:
-            for agg_col in ['gid', 'vid', 'gname', 'model', 'possession']:
-                del info[agg_col]
-    for bid in to_del:
-        del dmp[bid]
-
-
-def clean_vndb(dmp):
-    pass
+    elif type == Types.VNDB:
+        pass
 
 
 def merge_dump(egs, vndb):
-    return dict()  # Don't care atm thx for asking
+    pass  # Don't care atm thx for asking
     # i = 0
     # while i < len(dmp):
     #     if dmp[i]['title'] != special_visual_title(dmp[i]['title'], dmp[i]['id']):
@@ -215,14 +211,14 @@ def merge_dump(egs, vndb):
     #     i += 1
 
 
-def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
-    # 'dictionary_item_added', 'values_changed', 'dictionary_item_removed'
-    # root['\d+'] / root['\d+']['g']['\d+']
+def write_structure(diff_dmp: DeepDiff, mode, root='.', skip=None, cv_path=None):
+    # 'iterable_item_added', 'values_changed', 'iterable_item_removed'
+    # root[\d+] / root[\d+]['g'][\d+]
     # ['name'] = change / add, rem
     # ]['g'][ = release / brand
 
     if skip is None:
-        skip = []
+        skip = set()
 
     def pretty(lod, indent=0):
         if len(lod) == 0:
@@ -232,33 +228,33 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
     badds = []
     gadds = []
     try:
-        for level in diff_dmp['dictionary_item_added']:
+        for level in diff_dmp['iterable_item_added']:
             if 'g' in level.path(output_format='list'):
-                gadds.append({'brand': level.up.up.t2['name'],
-                              'id': level.path(output_format='list')[-1],
+                gadds.append({'brand': level.up.t2['name'],
+                              'id': level.t2['id'],
                               'name': level.t2['name']})
             else:
-                badds.append({'id': level.path(output_format='list')[-1],
+                badds.append({'id': level.t2['id'],
                               'name': level.t2['name']})
-                for gid, info in level.t2['g'].items():
+                for g in level.t2['g']:
                     gadds.append({'brand': level.t2['name'],
-                                  'id': gid,
-                                  'name': info['name']})
-    except KeyError as e:
+                                  'id': g['id'],
+                                  'name': g['name']})
+    except KeyError as _:
         pass
 
     brems = []
     grems = []
     try:
-        for level in diff_dmp['dictionary_item_removed']:
+        for level in diff_dmp['iterable_item_removed']:
             if 'g' in level.path(output_format='list'):
-                grems.append({'brand': level.up.up.t1['name'],
-                              'id': level.path(output_format='list')[-1],
+                grems.append({'brand': level.up.t1['name'],
+                              'id': level.t1['id'],
                               'name': level.t1['name']})
             else:
-                brems.append({'id': level.path(output_format='list')[-1],
+                brems.append({'id': level.t1['id'],
                               'name': level.t1['name']})
-    except KeyError as e:
+    except KeyError as _:
         pass
 
     bchgs = []
@@ -268,14 +264,14 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
             if 'g' in level.path(output_format='list'):
                 # using new brand name would be problematic in the case the brand name change gets skipped but game does not
                 gchgs.append({'brand': level.up.up.up.t1['name'],
-                              'id': level.path(output_format='list')[-2],
+                              'id': level.up.t1['id'],
                               'old': level.t1,
                               'new': level.t2})
             else:
-                bchgs.append({'id': level.path(output_format='list')[-2],
+                bchgs.append({'id': level.up.t1['id'],
                               'old': level.t1,
                               'new': level.t2})
-    except KeyError as e:
+    except KeyError as _:
         pass
 
     double_trouble = False
@@ -284,20 +280,21 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
     changes = [[[], [], []], [[], [], []]]
     skipped = set()
     finished = set()
+    special_check = [None, None]
     try:
         if len(brems) != 0:
             print('Brand deletions:')
             for b in brems:
                 index += 1
-                path = b['name']
+                path = os.path.join(root, b['name'])
                 if index in skip:
                     skipped.add(path)
                     continue
-                if mode == modes.NORMAL:
+                if mode == Modes.NORMAL:
                     shutil.move(path, os.path.join('.Deleted', path))
                     changes[0][2].append(b)
                     print(f'{index}) Deleted 「 {path} 」')
-                elif mode == modes.DRYRUN:
+                elif mode == Modes.DRYRUN:
                     print(f'{index}) Delete 「 {path} 」')
                 count[0][2] += 1
                 finished.add(path)
@@ -306,16 +303,16 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
             print('Game deletions:')
             for g in grems:
                 index += 1
-                path = os.path.join(g['brand'], g['name'])
+                path = os.path.join(root, g['brand'], g['name'])
                 if index in skip:
                     if index in skip:
                         skipped.add(path)
                         continue
-                if mode == modes.NORMAL:
+                if mode == Modes.NORMAL:
                     shutil.move(path, os.path.join('.Deleted', path))
                     changes[1][2].append(g)
                     print(f'{index}) Deleted 「 {path} 」')
-                elif mode == modes.DRYRUN:
+                elif mode == Modes.DRYRUN:
                     print(f'{index}) Delete 「 {path} 」')
                 count[1][2] += 1
                 finished.add(path)
@@ -328,8 +325,8 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
                 tmp = len(gchgs_c)
                 i = 0
                 while i < len(gchgs_c):
-                    opath = os.path.join(gchgs_c[i]['brand'], gchgs_c[i]['old'])
-                    npath = os.path.join(gchgs_c[i]['brand'], gchgs_c[i]['new'])
+                    opath = os.path.join(root, gchgs_c[i]['brand'], gchgs_c[i]['old'])
+                    npath = os.path.join(root, gchgs_c[i]['brand'], gchgs_c[i]['new'])
                     if npath not in finished and os.path.exists(npath):
                         if npath in skipped:
                             # TODO: CHECK ISSUES ARISING FROM INDEX += 1 HERE (PROBABLY NONE)
@@ -344,11 +341,11 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
                         skipped.add(opath)
                         del gchgs_c[i]
                         continue
-                    if mode == modes.NORMAL:
+                    if mode == Modes.NORMAL:
                         shutil.move(opath, npath)
                         changes[1][1].append(gchgs_c[i])
                         print(f'{index}) Changed 「 {opath} 」 to 「 {npath} 」')
-                    elif mode == modes.DRYRUN:
+                    elif mode == Modes.DRYRUN:
                         print(f'{index}) Change 「 {opath} 」 to 「 {npath} 」')
                     count[1][1] += 1
                     del gchgs_c[i]
@@ -368,8 +365,8 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
                 tmp = len(bchgs_c)
                 i = 0
                 while i < len(bchgs_c):
-                    opath = bchgs_c[i]['old']
-                    npath = bchgs_c[i]['new']
+                    opath = os.path.join(root, bchgs_c[i]['old'])
+                    npath = os.path.join(root, bchgs_c[i]['new'])
                     if npath not in finished and os.path.exists(npath):
                         if npath in skipped:
                             # TODO: CHECK ISSUES ARISING FROM INDEX += 1 HERE (PROBABLY NONE)
@@ -383,11 +380,11 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
                     if index in skip:
                         skipped.add(opath)
                         continue
-                    if mode == modes.NORMAL:
+                    if mode == Modes.NORMAL:
                         shutil.move(opath, npath)
                         changes[0][1].append(bchgs_c[i])
                         print(f'{index}) Changed 「 {opath} 」 to 「 {npath} 」')
-                    elif mode == modes.DRYRUN:
+                    elif mode == Modes.DRYRUN:
                         print(f'{index}) Change 「 {opath} 」 to 「 {npath} 」')
                     count[0][1] += 1
                     del bchgs_c[i]
@@ -400,43 +397,65 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
                 raise Exception
 
         if len(badds) != 0:
+            special_check[0] = False
             print('Brand additions:')
             for b in badds:
-                path = b['name']
+                path = os.path.join(root, b['name'])
                 index += 1
                 if index in skip or path in skipped:
                     continue
-                if mode == modes.NORMAL:
+                if mode == Modes.NORMAL:
+                    special_check[1] = b
                     os.mkdir(path)
                     open(os.path.join(path, b['id']), 'w').close()
                     changes[0][0].append(b)
                     print(f'{index}) Created 「 {path} 」')
-                elif mode == modes.DRYRUN:
+                elif mode == Modes.DRYRUN:
                     print(f'{index}) Create 「 {path} 」')
                 count[0][0] += 1
 
         if len(gadds) != 0:
+            special_check[0] = True
             print('Game additions:')
             for g in gadds:
-                path = os.path.join(g['brand'], g['name'])
+                path = os.path.join(root, g['brand'], g['name'])
                 index += 1
                 if index in skip or path in skipped:
                     continue
-                if mode == modes.NORMAL:
+                if mode == Modes.NORMAL:
+                    special_check[1] = g
                     os.mkdir(path)
                     open(os.path.join(path, g['id']), 'w').close()
                     changes[1][0].append(g)
                     print(f'{index}) Created 「 {path} 」')
-                elif mode == modes.DRYRUN:
+                elif mode == Modes.DRYRUN:
                     print(f'{index}) Create 「 {path} 」')
                 count[1][0] += 1
 
-    except Exception as e:
+    except:
         try:
+            if special_check[0] is not None:
+                path = [None, None]
+                if special_check[0]:
+                    path[0] = os.path.join(root, special_check[1]['brand'], special_check[1]['name'])
+                    if os.path.exists(path[0]):
+                        path[1] = os.path.join(root, os.path.join(path[0], special_check[1]['id']))
+                        if os.path.exists(path[1]):
+                            os.remove(path[1])
+                        os.rmdir(path[0])
+                else:
+                    path[0] = os.path.join(root, special_check[1]['name'])
+                    if os.path.exists(path[0]):
+                        path[1] = os.path.join(root, os.path.join(path[0], special_check[1]['id']))
+                        if os.path.exists(path[1]):
+                            os.remove(path[1])
+                        os.rmdir(path[0])
+                special_check[0] = None
+
             if len(changes[1][0]) != 0:
                 print('Rolling back game additions...')
                 while len(changes[1][0]) != 0:
-                    path = os.path.join(changes[1][0][-1]['brand'], changes[1][0][-1]['name'])
+                    path = os.path.join(root, changes[1][0][-1]['brand'], changes[1][0][-1]['name'])
                     os.remove(os.path.join(path, changes[1][0][-1]['id']))
                     os.rmdir(path)
                     del changes[1][0][-1]
@@ -444,7 +463,7 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
             if len(changes[0][0]) != 0:
                 print('Rolling back brand additions...')
                 while len(changes[0][0]) != 0:
-                    path = changes[0][0][-1]['name']
+                    path = os.path.join(root, changes[0][0][-1]['name'])
                     os.remove(os.path.join(path, changes[0][0][-1]['id']))
                     os.rmdir(path)
                     del changes[0][0][-1]
@@ -452,36 +471,41 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
             if len(changes[0][1]) != 0:
                 print(f'Rolling back brand changes...')
                 while len(changes[0][1]) != 0:
-                    opath = changes[0][1][-1]['old']
-                    npath = changes[0][1][-1]['new']
+                    opath = os.path.join(root, changes[0][1][-1]['old'])
+                    npath = os.path.join(root, changes[0][1][-1]['new'])
                     shutil.move(npath, opath)
                     del changes[0][1][-1]
 
             if len(changes[1][1]) != 0:
                 print(f'Rolling back game changes...')
                 while len(changes[1][1]) != 0:
-                    opath = os.path.join(changes[1][1][-1]['brand'], changes[1][1][-1]['old'])
-                    npath = os.path.join(changes[1][1][-1]['brand'], changes[1][1][-1]['new'])
+                    opath = os.path.join(root, changes[1][1][-1]['brand'], changes[1][1][-1]['old'])
+                    npath = os.path.join(root, changes[1][1][-1]['brand'], changes[1][1][-1]['new'])
                     shutil.move(npath, opath)
                     del changes[1][1][-1]
 
             if len(changes[1][2]) != 0:
                 print('Rolling back game deletions...')
                 while len(changes[1][2]) != 0:
-                    path = os.path.join(changes[1][2][-1]['brand'], changes[1][2][-1]['name'])
+                    path = os.path.join(root, changes[1][2][-1]['brand'], changes[1][2][-1]['name'])
                     shutil.move(os.path.join('.Deleted', path), path)
                     del changes[1][2][-1]
 
             if len(changes[0][2]) != 0:
                 print(f'Rolling back brand deletions...')
                 while len(changes[0][2]) != 0:
-                    path = changes[0][2][-1]['name']
+                    path = os.path.join(root, changes[0][2][-1]['name'])
                     shutil.move(os.path.join('.Deleted', path), path)
                     del changes[0][2][-1]
 
-        except Exception as e:
+        except:
             print('An error occured while rolling back changes...（；ﾟдﾟ）ﾔﾍﾞｪ')
             double_trouble = True
+            if special_check[0] is not None:
+                if special_check[0]:
+                    changes[1][0].append(special_check[1])
+                else:
+                    changes[0][0].append(special_check[1])
 
     print()
     print(f'Planned changes:\n'
@@ -856,149 +880,140 @@ def write_structure(diff_dmp: DeepDiff, mode, skip=None, cv_path=None):
     # print(f'Created {count[0]} and edited {count[1]} and deleted {count[2]}!\nPlease check these for any dead links:\n{nl.join([" -> ".join(x) for x in zip(multirelease_edits[0], multirelease_edits[1])])}')
 
 
-def main():
-    egs_user = None
-    vndb_user = None
-
-    def infer_dump(type):
-        if type != dumps.EGS:
-            return dict()  # don't care atm thx for asking
-
-        print('Inferring previous dump data from folder structure...')
-        dmp = dict()
-        walkie = walklevel('.', depth=1)
+def infer_dump(type, root='.'):
+    print('Inferring previous dump data from folder structure...')
+    if type == Types.EGS:
+        dmp = ['EGS-ubg-Inferred']
+        walkie = helper.walklevel(root, depth=1)
         next(walkie)
         for dir, _, files in walkie:
             name = dir[2:]
-            bid = next(filter(lambda x: '.' not in x, files), None)
+            bid = next(filter(lambda x: regex.match(r'$\d+^', x) is not None, files), None)
             if bid is None:
                 continue
-            dmp[bid] = dict()
-            dmp[bid]['name'] = name
-            dmp[bid]['g'] = dict()
-            talkie = walklevel(os.sep.join(['.', name]), depth=1)
+            dmp.append(dict())
+            dmp[-1]['id'] = bid
+            dmp[-1]['name'] = name
+            dmp[-1]['g'] = []
+            talkie = helper.walklevel(os.sep.join([root, name]), depth=1)
             next(talkie)
             for dir2, _, files2 in talkie:
                 title = dir2.rsplit(os.sep, maxsplit=1)[1]
-                gid = next(filter(lambda x: '.' not in x, files2), None)
+                gid = next(filter(lambda x: regex.match(r'$\d+^', x) is not None, files2), None)
                 if gid is None:
                     continue
-                dmp[bid]['g'][gid] = dict()
-                dmp[bid]['g'][gid]['name'] = title
+                dmp[-1]['g'].append(dict())
+                dmp[-1]['g'][-1]['id'] = gid
+                dmp[-1]['g'][-1]['name'] = title
+    elif type == Types.VNDB:
+        dmp = ['VNDB-Inferred']
+    elif type == Types.EGS_VNDB:
+        dmp = ['EGS-VNDB-Inferred']
 
-        return dmp
+    return dmp
 
-    def read_dump(dump, user=None, prev_dump=False):
-        if not isinstance(dump, dumps):
-            raise TypeError
-        if dump == dumps.EGS_VNDB:
-            raise ValueError
 
-        if prev_dump:
-            choice = 0
-        else:
-            msg = f'{dump.name}:'
-            choices = ['Use downloaded dump',
-                       'Download latest dump and save it',
-                       'Download latest dump but don\'t save it']
-            choice = ask(msg, choices=choices)
-            while not -1 < choice < 3:
-                print()
-                choice = ask(msg, choices=choices)
+def read_dump(type, root='.', can_dl=False, user=None, none=False):
+    if type == Types.EGS:
+        dmp = EGS_SQL.get_dump('ubg', root=root, can_dl=can_dl, user=user, none=none)
+        if dmp is None:
+            return None
+        if can_dl:
+            ls = EGS_SQL.local_dumps('ubg', root=root)
+            if dmp[0] + '.json' not in ls:
+                EGS_SQL.write_dump(dmp=dmp, root=root)
+    elif type == Types.VNDB:
+        dmp = VNDB_API.get_dump(False, root=root, can_dl=can_dl, user=user, none=none)
+        if dmp is None:
+            return None
+        if can_dl:
+            ls = VNDB_API.local_dumps(False, root=root)
+            if dmp[0] + '.json' not in ls:
+                VNDB_API.write_dump(dmp=dmp, root=root)
 
-        if dump == dumps.VNDB:
-            ls = list(VNDB_API.local_dumps(False))
-        elif dump == dumps.EGS:
-            ls = list(EGS_SQL.local_dumps('ubg'))
+    return dmp
 
-        if choice == 0 and len(ls) == 0:
-            print(f'Couldn\'t find local {dump.name} dump.')
-            if prev_dump:
-                return dict()
-            print('Falling back to downloading and saving...')
-            choice = 1
-        if choice == 0:
-            if prev_dump:
-                msg = 'Choose previous dump:'
-                i = ask(msg, choices=ls, no_choice=True)
-                while not -2 < i < len(ls):
-                    i = ask(msg, choices=ls, no_choice=True)
-                if i == -1:
-                    return dict()
-            else:
-                msg = 'Choose current dump:'
-                i = ask(msg, choices=ls, no_choice=False)
-                while not -1 < i < len(ls):
-                    i = ask(msg, choices=ls, no_choice=False)
-            with open(ls[i], 'r', encoding='utf-8') as f:
-                dmp = load(f)
-        elif choice == 1 or choice == 2:
-            if user is None:
-                msg = f'{dump.name} user:'
-                user = ask(msg)
-            if dump == dumps.VNDB:
-                dmp = VNDB_API.dump(user, False)
-            elif dump == dumps.EGS:
-                dmp = EGS_SQL.dump(user, 'ubg')
-        if choice == 1:
-            if dump == dumps.VNDB:
-                VNDB_API.write_dump(False, dmp=dmp)
-            elif dump == dumps.EGS:
-                EGS_SQL.write_dump('ubg', dmp=dmp)
-        return dmp
+
+def choose_dumps(type, root='.', user=None):
+    if (type == Types.EGS and EGS_available and not bool(input('Use EGS? empty for Y anything for N\n>'))) or (
+            type == Types.VNDB and VNDB_available and bool(input('Use VNDB? empty for N anything for Y\n>'))):
+        cdmp = read_dump(type, root=root, can_dl=True, user=user)
+        pdmp = read_dump(type, root=root, none=True)
+        if pdmp is None:
+            pdmp = infer_dump(type, root=root)
+        clean_dump(type, cdmp)
+        clean_dump(type, pdmp)
+    else:
+        cdmp = None
+        pdmp = None
+
+    return pdmp, cdmp
+
+
+def diff(pdmp, cdmp):
+    return DeepDiff(pdmp, cdmp, exclude_regex_paths=[r"root\[0\]", r"root\[\d+]\['g']\[\d+]\['vid']",
+                                                     r"root\[\d+]\['g']\[\d+]\['model']"],
+                    iterable_compare_func=compare_func, ignore_order=True, view='tree')
+
+
+def main():
+    skip_str = ''
+    skip = parse_skip_str(skip_str)
 
     if EGS_available and not bool(input('Use EGS? empty for Y anything for N\n>')):
-        cdmp_egs = read_dump(dumps.EGS, user=egs_user)
-        pdmp_egs = read_dump(dumps.EGS, prev_dump=True)
+        cdmp_egs = read_dump(Types.EGS, can_dl=True)
+        pdmp_egs = read_dump(Types.EGS, none=True)
+        if pdmp_egs is None:
+            pdmp_egs = infer_dump(Types.EGS)
+        clean_dump(Types.EGS, cdmp_egs)
+        clean_dump(Types.EGS, pdmp_egs)
     else:
-        cdmp_egs = dict()
-        pdmp_egs = dict()
+        cdmp_egs = None
+        pdmp_egs = None
 
     cv_path = None
     if VNDB_available and bool(input('Use VNDB? empty for N anything for Y\n>')):
-        cdmp_vndb = read_dump(dumps.VNDB, user=vndb_user)
-        pdmp_vndb = read_dump(dumps.VNDB, prev_dump=True)
+        cdmp_vndb = read_dump(Types.VNDB, can_dl=True)
+        pdmp_vndb = read_dump(Types.VNDB, none=True)
+        if pdmp_vndb is None:
+            pdmp_vndb = infer_dump(Types.VNDB)
+        clean_dump(Types.VNDB, cdmp_vndb)
+        clean_dump(Types.VNDB, pdmp_vndb)
         if not bool(input('Create icons for folders? empty for Y anything for N\n>')):
             cv_path = input('VNDB covers dump path: leave empty to download covers\n>')
             if not cv_path:
                 cv_path = None
     else:
-        cdmp_vndb = dict()
-        pdmp_vndb = dict()
+        cdmp_vndb = None
+        pdmp_vndb = None
 
-    clean_egs(cdmp_egs)
-    clean_egs(pdmp_egs)
-    clean_vndb(cdmp_vndb)
-    clean_vndb(pdmp_vndb)
-    if len(cdmp_egs) != 0 and len(cdmp_vndb) != 0:
-        cdmp = merge_dump(egs=cdmp_egs, vndb=cdmp_vndb)
-        if len(pdmp_egs) != 0 and len(pdmp_vndb) != 0:
-            pdmp = merge_dump(pdmp_egs, pdmp_vndb)
+    if cdmp_egs is not None and cdmp_vndb is not None:
+        cdmp_egs = merge_dump(cdmp_egs, cdmp_vndb)
+        if pdmp_egs is not None and pdmp_vndb is not None:
+            pdmp_egs = merge_dump(pdmp_egs, pdmp_vndb)
         else:
-            pdmp = infer_dump(dumps.EGS_VNDB)
-    elif len(cdmp_egs) != 0:
-        cdmp = cdmp_egs
-        if len(pdmp_egs) != 0:
-            pdmp = pdmp_egs
+            pdmp_egs = infer_dump(Types.EGS_VNDB)
+    elif cdmp_egs is not None:
+        cdmp_egs = cdmp_egs
+        if pdmp_egs is not None:
+            pdmp_egs = pdmp_egs
         else:
-            pdmp = infer_dump(dumps.EGS)
-    elif len(cdmp_vndb) != 0:
-        cdmp = cdmp_vndb
-        if len(pdmp_vndb) != 0:
-            pdmp = pdmp_vndb
+            pdmp_egs = infer_dump(Types.EGS)
+    elif cdmp_vndb is not None:
+        cdmp_egs = cdmp_vndb
+        if pdmp_vndb is not None:
+            pdmp_egs = pdmp_vndb
         else:
-            pdmp = infer_dump(dumps.VNDB)
+            pdmp_egs = infer_dump(Types.VNDB)
     else:
         print('Requires either EGS or VNDB. Please provide.')
         input()
         return
 
-    diff_dmp = DeepDiff(pdmp, cdmp, exclude_regex_paths=[r"root\['\d+']\['g']\['\d+']\['vid']",
-                                                         r"root\['\d+']\['g']\['\d+']\['model']"], ignore_order=True,
-                        view='tree')
-    write_structure(diff_dmp, modes.DRYRUN, skip=skip, cv_path=cv_path)
+    diff_dmp = diff(pdmp_egs, cdmp_egs)
+    write_structure(diff_dmp, Modes.DRYRUN, skip=skip, cv_path=cv_path)
     input()
-    write_structure(diff_dmp, modes.NORMAL, skip=skip, cv_path=cv_path)
+    write_structure(diff_dmp, Modes.NORMAL, skip=skip, cv_path=cv_path)
     input()
 
 
