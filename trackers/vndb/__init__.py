@@ -1,3 +1,4 @@
+# -*- encoding:utf-8 -*-
 import json
 from datetime import datetime
 from os.path import join
@@ -6,27 +7,35 @@ import regex
 import requests
 from natsort import natsorted
 
-import helper
+from ... import helper
 
-status = ['Unknown', 'Pending', 'Obtained', 'On loan', 'Deleted']
-save_format = 'VNDB{full_backup}-{date}'
-regex_pattern = r'$VNDB{full_backup}-\d{4}(-\d\d){2}T\d{6}Z\.json^'
+__STATUS = ['Unknown', 'Pending', 'Obtained', 'On loan', 'Deleted']
+__DATE_FORMAT = '%Y-%m-%dT%H%M%SZ'
+__SAVE_FORMAT = 'VNDB{full_backup}-{date}'
+__REGEX_PATTERN = r'$VNDB{full_backup}-\d{4}(-\d\d){2}T\d{6}Z\.json^'
+__REQ_FULL = {"fields": "id,"
+                        "labels.label,"
+                        "started,"
+                        "finished,"
+                        "notes,"
+                        "vn{title, alttitle, image{id, url}},"
+                        "releases{list_status, id, title, alttitle, platforms, vns.id, patch, released, notes}"}
+__REQ_NORM = {"fields": "id,"
+                        "labels.label,"
+                        "vn{title, alttitle, image{id, url}},"
+                        "releases{list_status, id, title, alttitle, platforms, vns.id, patch}"}
 
 
 def dump(user, full_backup):
     if full_backup:
-        req = {
-            "fields": "id, labels.label, started, finished, notes, vn{title, alttitle, image{id, url}}, releases{list_status, id, title, alttitle, platforms, vns.id, patch, released, notes}"
-        }
+        req = __REQ_FULL.copy()
     else:
-        req = {
-            "fields": "id, labels.label, vn{title, alttitle, image{id, url}}, releases{list_status, id, title, alttitle, platforms, vns.id, patch}"
-        }
+        req = __REQ_NORM.copy()
     req['user'] = user
     req['results'] = 100
     i = 0
-    dmp = [save_format.format(full_backup='-full_backup' if full_backup else '',
-                              date=datetime.utcnow().strftime("%Y-%m-%dT%H%M%SZ"))]
+    dmp = [__SAVE_FORMAT.format(full_backup='-full_backup' if full_backup else '',
+                                date=datetime.utcnow().strftime(__DATE_FORMAT))]
     while True:
         i += 1
         req['page'] = i
@@ -46,7 +55,7 @@ def dump(user, full_backup):
             vn['name'] = title
             del vn['vn']
             for r in vn['releases']:
-                r['status'] = status[r['list_status']]
+                r['status'] = __STATUS[r['list_status']]
                 del r['list_status']
                 if r['alttitle'] == '':
                     title = r['title']
@@ -75,10 +84,8 @@ def write_dump(user=None, full_backup=None, dmp=None, root='.'):
 
 
 def local_dumps(full_backup, root='.'):
-    return filter(
-        lambda x: regex.match(regex_pattern.replace('{full_backup}', '-full_backup' if full_backup else ''),
-                              x) is not None,
-        natsorted(next(helper.walklevel(root))[2]))
+    return natsorted(filter(lambda x: regex.match(__REGEX_PATTERN.replace('{full_backup}', '-full_backup' if full_backup else ''), x) is not None,
+                            next(helper.walklevel(root))[2]))
 
 
 def get_dump(full_backup, root='.', can_dl=False, user=None, none=False):
@@ -98,15 +105,3 @@ def get_dump(full_backup, root='.', can_dl=False, user=None, none=False):
         else:
             with open(ans, 'r', encoding='utf-8') as f:
                 return json.load(f)
-
-
-def main():
-    user = None
-    if user is None:
-        user = helper.ask('user:')
-    full_backup = bool(input('Dump entire userlist? Empty for N anything for Y\n>'))
-    write_dump(full_backup, user=user)
-
-
-if __name__ == '__main__':
-    main()

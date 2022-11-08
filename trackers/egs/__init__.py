@@ -8,15 +8,26 @@ import requests
 from bs4 import BeautifulSoup
 from natsort import natsorted
 
-import helper
-
-sql_tables = ['u', 'gb', 'ugb', 'bg', 'ubg', 'ugrgb', 'kankei', 'ugbkankei']
-save_format = r'EGS-{sql_table}-{date}'
-regex_pattern = r'$EGS-{sql_table}-\d{4}(-\d\d){2}T\d{6}Z\.json^'
+from ... import helper
 
 
-def dump(user, sql_table):
-    sql = f"""WITH
+"""
+    gb = game + brand
+    bg = brand + array_agg(game)
+    u = userlist(gid + possession)だけ
+    ugb = userlistの game + brand
+    ubg = userlistの brand + array_agg(game)
+    ugrgb = userlistの group + array_agg(game) + array_agg(brand)
+    kankei = kankei WHERE kind IN ('apend','bundling')
+    ugbkankei = userlistの game + brand + array_agg(bundle_of) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends)
+"""
+__TABLES = {'u', 'gb', 'ugb', 'bg', 'ubg', 'ugrgb', 'kankei', 'ugbkankei'}
+__AGG_TABLES = {'bg', 'ubg', 'ugrgb', 'ugbkankei'}
+__AGG_COLS = {'gid', 'vid', 'gname', 'model', 'bid', 'bname', 'bundled_in', 'bundle_of', 'appends', 'append_to'}
+__DATE_FORMAT = '%Y-%m-%dT%H%M%SZ'
+__SAVE_FORMAT = 'EGS-{table}-{date}'
+__REGEX_PATTERN = r'$EGS-{table}-\d{4}(-\d\d){2}T\d{6}Z\.json^'
+__SQL = """WITH
     gb AS (SELECT gamelist.id as gid,
                   gamelist.vndb as vid,
                   gamename as gname,
@@ -147,21 +158,14 @@ def dump(user, sql_table):
                              appends DESC,
                              gid
                  )
-    
-    /*
-    gb = game + brand
-    bg = brand + array_agg(game)
-    u = userlist(gid + possession)だけ
-    ugb = userlistの game + brand
-    ubg = userlistの brand + array_agg(game)
-    ugrgb = userlistの group + array_agg(game) + array_agg(brand)
-    kankei = kankei WHERE kind IN ('apend','bundling')
-    ugbkankei = userlistの game + brand + array_agg(bundle_of) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends)
-    */
-    """
 
-    sql += f'SELECT * FROM {sql_table}'  # refer to the above list of tables
+    SELECT * FROM {table}"""
 
+
+def dump(user, table):
+    if table not in __TABLES:
+        raise ValueError
+    sql = __SQL.format(user=user, table=table)
     r = requests.post("https://erogamescape.dyndns.org/~ap2/ero/toukei_kaiseki/sql_for_erogamer_form.php",
                       data={"sql": sql})
 
@@ -170,62 +174,61 @@ def dump(user, sql_table):
     rows = iter(table)
     next(rows)
     headers = [col.text for col in next(rows)]
-    dmp = [save_format.format(sql_table=sql_table, date=datetime.utcnow().strftime("%Y-%m-%dT%H%M%SZ"))]
+    dmp = [__SAVE_FORMAT.format(table=table, date=datetime.utcnow().strftime(__DATE_FORMAT))]
     for row in rows:
         if row == '\n':
             continue
         values = [col.text for col in row]
         dmp.append(dict(zip(headers, values)))
-        if sql_table in ['bg', 'ubg', 'ugrgb', 'ugbkankei']:
+        if table in __AGG_TABLES:
             try:
                 s = dmp[-1]['possession']
                 if s[0] == '{' and s[-1] == '}':
                     dmp[-1]['possession'] = list(
                         map(lambda x: True if x == 't' else False if x == 'f' else None, s[1:-1].split(',')))
-            except:
+            except KeyError:
                 pass
-            for agg_col in ['gid', 'vid', 'gname', 'model', 'bid', 'bname', 'bundled_in', 'bundle_of', 'appends',
-                            'append_to']:
+            for agg_col in __AGG_COLS:
                 try:
                     s = dmp[-1][agg_col]
-                    if s[0] == '{' and s[-1] == '}':
+                    if s.startswith('{') and s.endswith('}'):
                         tmp = s[1:-1].split(',')
                         i = 0
                         while i < len(tmp):
                             if tmp[i] == 'NULL':
                                 tmp[i] = None
-                            elif ' ' in tmp[i] and tmp[i][0] == '"' and tmp[i][-1] == '"':
+                            elif ' ' in tmp[i] and tmp[i].startswith('"') and tmp[i].endswith('"'):
                                 tmp[i] = tmp[i][1:-1]
-                            elif ' ' in tmp[i] and tmp[i][0] == '"':
+                            elif ' ' in tmp[i] and tmp[i].startswith('"'):  # element was split due to ',' inside it
                                 try:
-                                    tmp[i + 1] = tmp[i] + tmp[i + 1]
+                                    tmp[i + 1] = tmp[i] + tmp[i + 1]  # add it to the next element and deal with it then
                                     del tmp[i]
                                     continue
                                 except IndexError as e:
                                     pass
                             i += 1
                         dmp[-1][agg_col] = tmp
-                except:
+                except KeyError:
                     pass
     return dmp
 
 
-def write_dump(user=None, sql_table=None, dmp=None, root='.'):
-    if (user is None or sql_table is None) and dmp is None:
+def write_dump(user=None, table=None, dmp=None, root='.'):
+    if (user is None or table is None) and dmp is None:
         raise ValueError
     if dmp is None:
-        dmp = dump(user, sql_table)
+        dmp = dump(user, table)
     with open(join(root, dmp[0] + '.json'), 'w', encoding='utf-8') as f:
         json.dump(dmp, f, ensure_ascii=False)
 
 
-def local_dumps(sql_table, root='.'):
-    return natsorted(filter(lambda x: regex.match(regex_pattern.replace('{sql_table}', sql_table), x) is not None,
+def local_dumps(table, root='.'):
+    return natsorted(filter(lambda x: regex.match(__REGEX_PATTERN.replace('{table}', table), x) is not None,
                             next(helper.walklevel(root))[2]))
 
 
-def get_dump(sql_table, root='.', can_dl=False, user=None, none=False):
-    ls = list(local_dumps(sql_table, root=root))
+def get_dump(table, root='.', can_dl=False, user=None, none=False):
+    ls = list(local_dumps(table, root=root))
     if can_dl:
         ls.append('Download latest dump')
     if len(ls) == 0:
@@ -237,34 +240,20 @@ def get_dump(sql_table, root='.', can_dl=False, user=None, none=False):
         elif ans == 'Download latest dump':
             if user is None:
                 user = helper.ask('user:')
-            return dump(user, sql_table)
+            return dump(user, table)
         else:
             with open(ans, 'r', encoding='utf-8') as f:
                 return json.load(f)
 
 
-def ask_sql_table():
-    sql_table = helper.ask('SQL Table:', choices=sql_tables)
-    while sql_table not in sql_tables:
-        print("u = userlist(gid + possession)だけ\n"
-              "gb = game + brand\n"
-              "ugb = userlistの game + brand\n"
-              "bg = brand + array_agg(game)\n"
-              "ubg = userlistの brand + array_agg(game)\n"
-              "ugrgb = userlistの group + array_agg(game) + array_agg(brand)\n"
-              "kankei = kankei WHERE kind IN ('apend','bundling')\n"
-              "ugbkankei = userlistの game + brand + array_agg(bundle_of) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends))")
-        sql_table = helper.ask('SQL Table', choices=sql_tables)
-    return sql_table
+def ask_table():
+    return helper.ask("gb = game + brand\n"
+                       "bg = brand + array_agg(game)\n"
+                       "u = userlist(gid + possession)だけ\n"
+                       "ugb = userlistの game + brand\n"
+                       "ubg = userlistの brand + array_agg(game)\n"
+                       "ugrgb = userlistの group + array_agg(game) + array_agg(brand)\n"
+                       "kankei = kankei WHERE kind IN ('apend','bundling')\n"
+                       "ugbkankei = userlistの game + brand + array_agg(bundle_of) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends)\n"
+                       "SQL Table:", choices=__TABLES)
 
-
-def main():
-    user = None
-    if user is None:
-        user = helper.ask('user:')
-    sql_table = ask_sql_table()
-    write_dump(sql_table, user=user)
-
-
-if __name__ == '__main__':
-    main()

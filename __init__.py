@@ -1,4 +1,5 @@
 # -*- encoding:utf-8 -*-
+from enum import Enum
 import os
 import shutil
 
@@ -6,31 +7,18 @@ import regex
 from deepdiff import DeepDiff
 from deepdiff.helper import CannotCompare
 
-from enums import *
-
-try:
-    import EGS_SQL
-
-    EGS_available = True
-except ImportError as _:
-    EGS_available = False
-try:
-    import VNDB_API
-
-    VNDB_available = True
-except ImportError as _:
-    VNDB_available = False
+from trackers import *
 import helper
 
 
-def compare_func(x, y, level=None):
+def __compare_func(x, y, level=None):
     try:
         return x['id'] == y['id']
     except Exception:
         raise CannotCompare() from None
 
 
-# EXTRAS = ['壁紙', 'イラスト', 'レーベル', 'ジャケット', 'マニュアル', 'アイコン', 'ヘッダー', 'あざらしWalker']
+tokuten = ['壁紙', 'イラスト', 'レーベル', 'ジャケット', 'マニュアル', 'アイコン', 'ヘッダー', 'あざらしWalker']
 # quotes
 dquotes = [('「', '」'), ('『', '』'), ('“', '”')]
 # special edits
@@ -59,10 +47,10 @@ def parse_skip_str(s):
     return skip
 
 
-def special_chars_to_full_width(string, dquotes=dquotes[2]):
+def __special_chars_to_full_width(string, dquotes=dquotes[2]):
     # \/:*?"<>|
     # WON'T REPLACE <> AND F NTFS (actually haven't encountered yet（；ﾟдﾟ）ｺﾁｺﾁ)
-    if string[-1] == '.':
+    if string.endswith('.'):
         # print(f'TRAILING PERIOD（；ﾟдﾟ）ﾋｨｨｨ Title: {string}')
         string = string[:-1]
     lis = []
@@ -91,22 +79,22 @@ def special_chars_to_full_width(string, dquotes=dquotes[2]):
     return ''.join(lis)
 
 
-def special_visual_title(t, id):
+def __special_visual_title(t, id):
     st = sv.get(id)
     if st is not None:
         return st
     return t
 
 
-def special_release_title(t, id):
+def __special_release_title(t, id):
     st = sv.get(id)
     if st is not None:
         return st
     return t
 
 
-def clean_dump(type, dmp):
-    if type == Types.EGS:
+def clean_dump(tracker, dmp):
+    if tracker == Trackers.EGS:
 
         i = 1
         while i < len(dmp):
@@ -117,7 +105,7 @@ def clean_dump(type, dmp):
             if title is None:
                 for del_name in del_b:
                     dmp[i]['bname'] = dmp[i]['bname'].replace(del_name, '')
-                dmp[i]['name'] = special_chars_to_full_width(dmp[i]['bname'])
+                dmp[i]['name'] = __special_chars_to_full_width(dmp[i]['bname'])
             else:
                 dmp[i]['name'] = title
             del dmp[i]['bname']
@@ -129,7 +117,7 @@ def clean_dump(type, dmp):
                     if title is None:
                         for del_name in del_g:
                             dmp[i]['gname'][j] = dmp[i]['gname'].replace(del_name, '')
-                        dmp[i]['gname'][j] = special_chars_to_full_width(dmp[i]['gname'][j])
+                        dmp[i]['gname'][j] = __special_chars_to_full_width(dmp[i]['gname'][j])
                     else:
                         dmp[i]['gname'][j] = title
                     dmp[i]['g'].append({'id': dmp[i]['gid'][j],
@@ -148,7 +136,7 @@ def clean_dump(type, dmp):
                 for agg_col in ['gid', 'vid', 'gname', 'model', 'possession']:
                     del dmp[i][agg_col]
                 i += 1
-    elif type == Types.VNDB:
+    elif tracker == Trackers.VNDB:
         pass
 
 
@@ -240,7 +228,7 @@ def write_structure(diff_dmp: DeepDiff, mode, root='.', skip=None, cv_path=None)
                     gadds.append({'brand': level.t2['name'],
                                   'id': g['id'],
                                   'name': g['name']})
-    except KeyError as _:
+    except KeyError:
         pass
 
     brems = []
@@ -254,7 +242,7 @@ def write_structure(diff_dmp: DeepDiff, mode, root='.', skip=None, cv_path=None)
             else:
                 brems.append({'id': level.t1['id'],
                               'name': level.t1['name']})
-    except KeyError as _:
+    except KeyError:
         pass
 
     bchgs = []
@@ -271,7 +259,7 @@ def write_structure(diff_dmp: DeepDiff, mode, root='.', skip=None, cv_path=None)
                 bchgs.append({'id': level.up.t1['id'],
                               'old': level.t1,
                               'new': level.t2})
-    except KeyError as _:
+    except KeyError:
         pass
 
     double_trouble = False
@@ -432,7 +420,10 @@ def write_structure(diff_dmp: DeepDiff, mode, root='.', skip=None, cv_path=None)
                     print(f'{index}) Create 「 {path} 」')
                 count[1][0] += 1
 
-    except:
+    except Exception as e1:
+        if mode == Modes.NORMAL:
+            print('An occurred during writing changes. Rolling back...')
+            print(repr(e1))
         try:
             if special_check[0] is not None:
                 path = [None, None]
@@ -498,8 +489,9 @@ def write_structure(diff_dmp: DeepDiff, mode, root='.', skip=None, cv_path=None)
                     shutil.move(os.path.join('.Deleted', path), path)
                     del changes[0][2][-1]
 
-        except:
-            print('An error occured while rolling back changes...（；ﾟдﾟ）ﾔﾍﾞｪ')
+        except Exception as e2:
+            print('An error occurred during rolling back.（；ﾟдﾟ）ﾔﾍﾞｪ')
+            print(repr(e2))
             double_trouble = True
             if special_check[0] is not None:
                 if special_check[0]:
@@ -880,9 +872,9 @@ def write_structure(diff_dmp: DeepDiff, mode, root='.', skip=None, cv_path=None)
     # print(f'Created {count[0]} and edited {count[1]} and deleted {count[2]}!\nPlease check these for any dead links:\n{nl.join([" -> ".join(x) for x in zip(multirelease_edits[0], multirelease_edits[1])])}')
 
 
-def infer_dump(type, root='.'):
+def infer_dump(tracker, root='.'):
     print('Inferring previous dump data from folder structure...')
-    if type == Types.EGS:
+    if tracker == Trackers.EGS:
         dmp = ['EGS-ubg-Inferred']
         walkie = helper.walklevel(root, depth=1)
         next(walkie)
@@ -905,44 +897,44 @@ def infer_dump(type, root='.'):
                 dmp[-1]['g'].append(dict())
                 dmp[-1]['g'][-1]['id'] = gid
                 dmp[-1]['g'][-1]['name'] = title
-    elif type == Types.VNDB:
+    elif tracker == Trackers.VNDB:
         dmp = ['VNDB-Inferred']
-    elif type == Types.EGS_VNDB:
+    elif tracker == Trackers.EGS_VNDB:
         dmp = ['EGS-VNDB-Inferred']
 
     return dmp
 
 
-def read_dump(type, root='.', can_dl=False, user=None, none=False):
-    if type == Types.EGS:
-        dmp = EGS_SQL.get_dump('ubg', root=root, can_dl=can_dl, user=user, none=none)
+def read_dump(tracker, root='.', can_dl=False, user=None, none=False):
+    if tracker == Trackers.EGS:
+        dmp = egs.get_dump('ubg', root=root, can_dl=can_dl, user=user, none=none)
         if dmp is None:
             return None
         if can_dl:
-            ls = EGS_SQL.local_dumps('ubg', root=root)
+            ls = egs.local_dumps('ubg', root=root)
             if dmp[0] + '.json' not in ls:
-                EGS_SQL.write_dump(dmp=dmp, root=root)
-    elif type == Types.VNDB:
-        dmp = VNDB_API.get_dump(False, root=root, can_dl=can_dl, user=user, none=none)
+                egs.write_dump(dmp=dmp, root=root)
+    elif tracker == Trackers.VNDB:
+        dmp = vndb.get_dump(False, root=root, can_dl=can_dl, user=user, none=none)
         if dmp is None:
             return None
         if can_dl:
-            ls = VNDB_API.local_dumps(False, root=root)
+            ls = vndb.local_dumps(False, root=root)
             if dmp[0] + '.json' not in ls:
-                VNDB_API.write_dump(dmp=dmp, root=root)
+                vndb.write_dump(dmp=dmp, root=root)
 
     return dmp
 
 
-def choose_dumps(type, root='.', user=None):
-    if (type == Types.EGS and EGS_available and not bool(input('Use EGS? empty for Y anything for N\n>'))) or (
-            type == Types.VNDB and VNDB_available and bool(input('Use VNDB? empty for N anything for Y\n>'))):
-        cdmp = read_dump(type, root=root, can_dl=True, user=user)
-        pdmp = read_dump(type, root=root, none=True)
+def choose_dumps(tracker, root='.', user=None):
+    if (tracker == Trackers.EGS and Trackers.EGS in AVAILABLE and not bool(input('Use EGS? empty for Y anything for N\n>'))) or (
+            tracker == Trackers.VNDB and Trackers.VNDB in AVAILABLE and bool(input('Use VNDB? empty for N anything for Y\n>'))):
+        cdmp = read_dump(tracker, root=root, can_dl=True, user=user)
+        pdmp = read_dump(tracker, root=root, none=True)
         if pdmp is None:
-            pdmp = infer_dump(type, root=root)
-        clean_dump(type, cdmp)
-        clean_dump(type, pdmp)
+            pdmp = infer_dump(tracker, root=root)
+        clean_dump(tracker, cdmp)
+        clean_dump(tracker, pdmp)
     else:
         cdmp = None
         pdmp = None
@@ -953,69 +945,9 @@ def choose_dumps(type, root='.', user=None):
 def diff(pdmp, cdmp):
     return DeepDiff(pdmp, cdmp, exclude_regex_paths=[r"root\[0\]", r"root\[\d+]\['g']\[\d+]\['vid']",
                                                      r"root\[\d+]\['g']\[\d+]\['model']"],
-                    iterable_compare_func=compare_func, ignore_order=True, view='tree')
+                    iterable_compare_func=__compare_func, ignore_order=True, view='tree')
 
 
-def main():
-    skip_str = ''
-    skip = parse_skip_str(skip_str)
-
-    if EGS_available and not bool(input('Use EGS? empty for Y anything for N\n>')):
-        cdmp_egs = read_dump(Types.EGS, can_dl=True)
-        pdmp_egs = read_dump(Types.EGS, none=True)
-        if pdmp_egs is None:
-            pdmp_egs = infer_dump(Types.EGS)
-        clean_dump(Types.EGS, cdmp_egs)
-        clean_dump(Types.EGS, pdmp_egs)
-    else:
-        cdmp_egs = None
-        pdmp_egs = None
-
-    cv_path = None
-    if VNDB_available and bool(input('Use VNDB? empty for N anything for Y\n>')):
-        cdmp_vndb = read_dump(Types.VNDB, can_dl=True)
-        pdmp_vndb = read_dump(Types.VNDB, none=True)
-        if pdmp_vndb is None:
-            pdmp_vndb = infer_dump(Types.VNDB)
-        clean_dump(Types.VNDB, cdmp_vndb)
-        clean_dump(Types.VNDB, pdmp_vndb)
-        if not bool(input('Create icons for folders? empty for Y anything for N\n>')):
-            cv_path = input('VNDB covers dump path: leave empty to download covers\n>')
-            if not cv_path:
-                cv_path = None
-    else:
-        cdmp_vndb = None
-        pdmp_vndb = None
-
-    if cdmp_egs is not None and cdmp_vndb is not None:
-        cdmp_egs = merge_dump(cdmp_egs, cdmp_vndb)
-        if pdmp_egs is not None and pdmp_vndb is not None:
-            pdmp_egs = merge_dump(pdmp_egs, pdmp_vndb)
-        else:
-            pdmp_egs = infer_dump(Types.EGS_VNDB)
-    elif cdmp_egs is not None:
-        cdmp_egs = cdmp_egs
-        if pdmp_egs is not None:
-            pdmp_egs = pdmp_egs
-        else:
-            pdmp_egs = infer_dump(Types.EGS)
-    elif cdmp_vndb is not None:
-        cdmp_egs = cdmp_vndb
-        if pdmp_vndb is not None:
-            pdmp_egs = pdmp_vndb
-        else:
-            pdmp_egs = infer_dump(Types.VNDB)
-    else:
-        print('Requires either EGS or VNDB. Please provide.')
-        input()
-        return
-
-    diff_dmp = diff(pdmp_egs, cdmp_egs)
-    write_structure(diff_dmp, Modes.DRYRUN, skip=skip, cv_path=cv_path)
-    input()
-    write_structure(diff_dmp, Modes.NORMAL, skip=skip, cv_path=cv_path)
-    input()
-
-
-if __name__ == '__main__':
-    main()
+class Modes(Enum):
+    NORMAL = 'normal'
+    DRYRUN = 'dryrun'
