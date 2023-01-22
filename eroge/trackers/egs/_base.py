@@ -1,14 +1,14 @@
 # -*- encoding:utf-8 -*-
 import json
-from datetime import datetime
-from os.path import join
+from os.path import join, splitext
 
 import regex
 import requests
 from bs4 import BeautifulSoup
 from natsort import natsorted
 
-from ... import helper
+import eroge.helper as helper
+from eroge.trackers.rules import now, _FORMAT_SAVE, _PATTERN_SAVE
 
 
 """
@@ -21,13 +21,13 @@ from ... import helper
     kankei = kankei WHERE kind IN ('apend','bundling')
     ugbkankei = userlistの game + brand + array_agg(bundle_of) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends)
 """
-__TABLES = {'u', 'gb', 'ugb', 'bg', 'ubg', 'ugrgb', 'kankei', 'ugbkankei'}
-__AGG_TABLES = {'bg', 'ubg', 'ugrgb', 'ugbkankei'}
-__AGG_COLS = {'gid', 'vid', 'gname', 'model', 'bid', 'bname', 'bundled_in', 'bundle_of', 'appends', 'append_to'}
-__DATE_FORMAT = '%Y-%m-%dT%H%M%SZ'
-__SAVE_FORMAT = 'EGS-{table}-{date}'
-__REGEX_PATTERN = r'$EGS-{table}-\d{4}(-\d\d){2}T\d{6}Z\.json^'
-__SQL = """WITH
+
+FORMAT_SAVE = _FORMAT_SAVE.replace('{tracker}', 'egs')
+PATTERN_SAVE = _PATTERN_SAVE.replace('{tracker}', 'egs')
+TABLES = {'u', 'gb', 'ugb', 'bg', 'ubg', 'ugrgb', 'kankei', 'ugbkankei'}
+AGG_TABLES = {'bg', 'ubg', 'ugrgb', 'ugbkankei'}
+AGG_COLS = {'gid', 'vid', 'gname', 'model', 'bid', 'bname', 'bundled_in', 'bundle_of', 'appends', 'append_to'}
+SQL = """WITH
     gb AS (SELECT gamelist.id as gid,
                   gamelist.vndb as vid,
                   gamename as gname,
@@ -162,25 +162,44 @@ __SQL = """WITH
     SELECT * FROM {table}"""
 
 
-def dump(user, table):
-    if table not in __TABLES:
+def local_dumps(table, dump_root):
+    return natsorted(filter(lambda x: regex.match(PATTERN_SAVE.replace('{extra}', f'-{table}'), splitext(x)[0]) is not None,
+                            next(helper.walklevel(dump_root))[2]), reverse=True)
+
+
+def ask_table():
+    return helper.ask("gb = game + brand\n"
+                       "bg = brand + array_agg(game)\n"
+                       "u = userlist(gid + possession)だけ\n"
+                       "ugb = userlistの game + brand\n"
+                       "ubg = userlistの brand + array_agg(game)\n"
+                       "ugrgb = userlistの group + array_agg(game) + array_agg(brand)\n"
+                       "kankei = kankei WHERE kind IN ('apend','bundling')\n"
+                       "ugbkankei = userlistの game + brand + array_agg(bundle_of) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends)\n"
+                       "SQL Table:", choices=TABLES)
+
+
+def dl_dump(user, table=None):
+    if table is None:
+        table = ask_table()
+    elif table not in TABLES:
         raise ValueError
-    sql = __SQL.format(user=user, table=table)
+    sql = SQL.format(user=user, table=table)
     r = requests.post("https://erogamescape.dyndns.org/~ap2/ero/toukei_kaiseki/sql_for_erogamer_form.php",
                       data={"sql": sql})
 
     soup = BeautifulSoup(r.content, features='html.parser')
-    table = soup.find('div', attrs={'id': 'query_result_main'}).find('table')
-    rows = iter(table)
+    tbl = soup.find('div', attrs={'id': 'query_result_main'}).find('table')
+    rows = iter(tbl)
     next(rows)
     headers = [col.text for col in next(rows)]
-    dmp = [__SAVE_FORMAT.format(table=table, date=datetime.utcnow().strftime(__DATE_FORMAT))]
+    dmp = [FORMAT_SAVE.format(extra=f'-{table}', TIME=now())]
     for row in rows:
         if row == '\n':
             continue
         values = [col.text for col in row]
         dmp.append(dict(zip(headers, values)))
-        if table in __AGG_TABLES:
+        if table in AGG_TABLES:
             try:
                 s = dmp[-1]['possession']
                 if s[0] == '{' and s[-1] == '}':
@@ -188,7 +207,7 @@ def dump(user, table):
                         map(lambda x: True if x == 't' else False if x == 'f' else None, s[1:-1].split(',')))
             except KeyError:
                 pass
-            for agg_col in __AGG_COLS:
+            for agg_col in AGG_COLS:
                 try:
                     s = dmp[-1][agg_col]
                     if s.startswith('{') and s.endswith('}'):
@@ -213,24 +232,19 @@ def dump(user, table):
     return dmp
 
 
-def write_dump(user=None, table=None, dmp=None, root='.'):
-    if (user is None or table is None) and dmp is None:
+def write_dump(dump_root, user=None, table=None, dmp=None):
+    if dmp is None and (user is None or table is None):
         raise ValueError
     if dmp is None:
-        dmp = dump(user, table)
-    with open(join(root, dmp[0] + '.json'), 'w', encoding='utf-8') as f:
+        dmp = dl_dump(user, table)
+    with open(join(dump_root, dmp[0] + '.json'), 'w', encoding='utf-8') as f:
         json.dump(dmp, f, ensure_ascii=False)
 
 
-def local_dumps(table, root='.'):
-    return natsorted(filter(lambda x: regex.match(__REGEX_PATTERN.replace('{table}', table), x) is not None,
-                            next(helper.walklevel(root))[2]))
-
-
-def get_dump(table, root='.', can_dl=False, user=None, none=False):
-    ls = list(local_dumps(table, root=root))
-    if can_dl:
-        ls.append('Download latest dump')
+def get_dump(dump_root, table='ubg', user=None, none=False):
+    ls = list(local_dumps(table, dump_root=dump_root))
+    if user:
+        ls.insert(0, 'Download latest dump')
     if len(ls) == 0:
         return None
     else:
@@ -238,22 +252,9 @@ def get_dump(table, root='.', can_dl=False, user=None, none=False):
         if ans is None:
             return None
         elif ans == 'Download latest dump':
-            if user is None:
-                user = helper.ask('user:')
-            return dump(user, table)
+            dmp = dl_dump(user, table)
+            write_dump(dmp=dmp, dump_root=dump_root)
+            return dmp
         else:
-            with open(ans, 'r', encoding='utf-8') as f:
+            with open(join(dump_root, ans), 'r', encoding='utf-8') as f:
                 return json.load(f)
-
-
-def ask_table():
-    return helper.ask("gb = game + brand\n"
-                       "bg = brand + array_agg(game)\n"
-                       "u = userlist(gid + possession)だけ\n"
-                       "ugb = userlistの game + brand\n"
-                       "ubg = userlistの brand + array_agg(game)\n"
-                       "ugrgb = userlistの group + array_agg(game) + array_agg(brand)\n"
-                       "kankei = kankei WHERE kind IN ('apend','bundling')\n"
-                       "ugbkankei = userlistの game + brand + array_agg(bundle_of) + array_agg(append_to) + array_agg(bundled_in) + array_agg(appends)\n"
-                       "SQL Table:", choices=__TABLES)
-

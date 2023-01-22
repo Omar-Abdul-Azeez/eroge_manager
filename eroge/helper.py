@@ -29,20 +29,19 @@ def ask(msg, choices=None, show=False, none=False):
         print(msg)
         if choices is not None:
             if show:
-                if none:
-                    print('1)  None')
                 for i in range(len(choices)):
-                    print(f'{i + (2 if none else 1)})  {choices[i]}')
+                    print(f'{i + 1})  {choices[i]}')
+                if none:
+                    print(f'{i + 2})  None')
             ans = input('>')
-
+            if ans == '' and show:
+                return choices[0]
             if ans in choices:
                 return ans
 
             if show:
-                ans = int(ans) - (2 if none else 1)
-                if ans == -1:
+                ans = int(ans) - 1
+                if ans == len(choices) and none:
                     return None
-                elif -1 < len(choices):
+                elif -1 < ans < len(choices):
                     return choices[ans]
-
-        return input('>')

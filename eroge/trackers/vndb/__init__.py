@@ -7,7 +7,7 @@ import regex
 import requests
 from natsort import natsorted
 
-from ... import helper
+import eroge.helper as helper
 
 __STATUS = ['Unknown', 'Pending', 'Obtained', 'On loan', 'Deleted']
 __DATE_FORMAT = '%Y-%m-%dT%H%M%SZ'
@@ -26,7 +26,7 @@ __REQ_NORM = {"fields": "id,"
                         "releases{list_status, id, title, alttitle, platforms, vns.id, patch}"}
 
 
-def dump(user, full_backup):
+def dl_dump(user, full_backup):
     if full_backup:
         req = __REQ_FULL.copy()
     else:
@@ -74,23 +74,23 @@ def dump(user, full_backup):
     return dmp
 
 
-def write_dump(user=None, full_backup=None, dmp=None, root='.'):
+def write_dump(user=None, full_backup=None, dmp=None, dump_root='.'):
     if dmp is None:
         if user is None or full_backup is None:
             raise ValueError
-        dmp = dump(user, full_backup)
-    with open(join(root, dmp[0] + '.json'), 'w', encoding='utf-8') as f:
+        dmp = dl_dump(user, full_backup)
+    with open(join(dump_root, dmp[0] + '.json'), 'w', encoding='utf-8') as f:
         json.dump(dmp, f, ensure_ascii=False)
 
 
-def local_dumps(full_backup, root='.'):
+def local_dumps(full_backup=False, dump_root='.'):
     return natsorted(filter(lambda x: regex.match(__REGEX_PATTERN.replace('{full_backup}', '-full_backup' if full_backup else ''), x) is not None,
-                            next(helper.walklevel(root))[2]))
+                            next(helper.walklevel(dump_root))[2]))
 
 
-def get_dump(full_backup, root='.', can_dl=False, user=None, none=False):
-    ls = list(local_dumps(full_backup, root=root))
-    if can_dl:
+def get_dump(full_backup, dump_root='.', user=None, none=False):
+    ls = list(local_dumps(full_backup, dump_root=dump_root))
+    if user:
         ls.append('Download latest dump')
     if len(ls) == 0:
         return None
@@ -99,9 +99,9 @@ def get_dump(full_backup, root='.', can_dl=False, user=None, none=False):
         if ans is None:
             return None
         elif ans == 'Download latest dump':
-            if user is None:
-                user = helper.ask('user:')
-            return dump(user, full_backup)
+            dmp = dl_dump(user, full_backup)
+            write_dump(dmp=dmp, dump_root=dump_root)
+            return dmp
         else:
             with open(ans, 'r', encoding='utf-8') as f:
                 return json.load(f)
