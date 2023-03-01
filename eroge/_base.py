@@ -197,7 +197,7 @@ def write_structure(diff_dmp: DeepDiff, mode, backlog_root, skip=None):
     try:
         for level in diff_dmp['iterable_item_added']:
             if 'g' in level.path(output_format='list'):
-                gadds.append({'brand': level.up.t2['name'],
+                gadds.append({'brand': level.up.up.t2['name'],
                               'id': level.t2['id'],
                               'name': level.t2['name']})
             else:
@@ -215,7 +215,7 @@ def write_structure(diff_dmp: DeepDiff, mode, backlog_root, skip=None):
     try:
         for level in diff_dmp['iterable_item_removed']:
             if 'g' in level.path(output_format='list'):
-                grems.append({'brand': level.up.t1['name'],
+                grems.append({'brand': level.up.up.t1['name'],
                               'id': level.t1['id'],
                               'name': level.t1['name']})
             else:
