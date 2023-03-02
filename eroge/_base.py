@@ -537,7 +537,9 @@ def sync_backlog(pdmp, cdmp, mode, backlog_root, skip=None):
     if pdmp is None or len(pdmp) == 0:
         raise ValueError
     ctracker = regex.match(rules.PATTERN_GLOBAL, cdmp[0]).captures(1)[0]
-    if not pdmp[0] == 'Inferred':
+    if pdmp[0] == 'Inferred':
+        pdmp_ = pdmp
+    else:
         ptracker = regex.match(rules.PATTERN_GLOBAL, pdmp[0]).captures(1)[0]
         if not ptracker == ctracker:
             raise ValueError
