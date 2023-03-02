@@ -520,7 +520,9 @@ def diff(pdmp, cdmp):
                     iterable_compare_func=compare_func, ignore_order=True, view='tree')
 
 
-def get_dumps(dump_root, backlog_root, tracker=get_tracker(), user=None):
+def get_dumps(dump_root, backlog_root, tracker=None, user=None):
+    if tracker is None:
+        tracker = get_tracker()
     cdmp = get_dump(dump_root, tracker=tracker, user=user)
     pdmp = get_dump(dump_root, tracker=tracker, is_none_allowed=True)
     if pdmp is None:
