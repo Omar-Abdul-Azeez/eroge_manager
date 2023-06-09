@@ -5,7 +5,6 @@ import shutil
 import regex
 from copy import deepcopy
 from deepdiff import DeepDiff
-from deepdiff.helper import CannotCompare
 from pathvalidate import is_valid_filepath
 
 from eroge.trackers import *
@@ -17,7 +16,7 @@ def compare_func(x, y, level=None):
     try:
         return x['id'] == y['id']
     except Exception:
-        raise CannotCompare() from None
+        return False
 
 
 tokuten = ['壁紙', 'イラスト', 'レーベル', 'ジャケット', 'マニュアル', 'アイコン', 'ヘッダー', 'あざらしWalker']
@@ -166,7 +165,8 @@ def clean_dump(tracker, dmp_):
                     continue
                 elif dmp[i]['possession'][j] is None:
                     print(f'"possession = None" met! - Title: {dmp[i]["gname"][j]}')
-                del dmp[i]['gid'][j]
+                for agg_col in ['gid', 'vid', 'gname', 'model', 'possession']:
+                    del dmp[i][agg_col][j]
             if len(dmp[i]['gid']) == 0:
                 del dmp[i]
             else:

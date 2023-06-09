@@ -24,24 +24,44 @@ def walklevel(path, depth=1):
             del dirs[:]
 
 
-def ask(msg, choices=None, show=False, none=False):
+def ask(msg, choices, index=False, show=False, default=None, limit=0, none=False):
     while True:
         print(msg)
-        if choices is not None:
-            if show:
-                for i in range(len(choices)):
-                    print(f'{i + 1})  {choices[i]}')
-                if none:
-                    print(f'{i + 2})  None')
-            ans = input('>')
-            if ans == '' and show:
-                return choices[0]
-            if ans in choices:
+        if show:
+            for i in range(len(choices)):
+                if limit != 0 and i != 0 and i % limit == 0:
+                    ans = input('>')
+                    if ans != '':
+                        if ans in choices:
+                            if index:
+                                return choices.index(ans)
+                            else:
+                                return ans
+                        ans = int(ans) - 1
+                        if -1 < ans < i:
+                            if index:
+                                return ans
+                            else:
+                                return choices[ans]
+                    print(msg)
+                print(f'{i + 1})  {choices[i]}')
+            if none:
+                print(f'{i + 2})  None')
+        ans = input('>')
+        if ans == '' and show:
+            return default
+        if ans in choices:
+            if index:
+                return choices.index(ans)
+            else:
                 return ans
 
-            if show:
-                ans = int(ans) - 1
-                if ans == len(choices) and none:
-                    return None
-                elif -1 < ans < len(choices):
+        if show:
+            ans = int(ans) - 1
+            if ans == len(choices) and none:
+                return None
+            elif -1 < ans < len(choices):
+                if index:
+                    return ans
+                else:
                     return choices[ans]
