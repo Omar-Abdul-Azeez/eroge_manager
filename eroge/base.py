@@ -87,7 +87,8 @@ def infer_dump(root='.'):
             folder = os.path.basename(dir)
             bid = next(filter(lambda x: regex.match(r'^\d+$', x) is not None, files), None)
             if bid is None:
-                logger_module.warning('Couldn\'t identify 「%s」', folder)
+                if folder != '!Removed!':
+                    logger_module.warning('Couldn\'t identify 「%s」', folder)
                 continue
             logger_module.debug('Identified 「%s」', folder)
             dmp[bid] = {'name': folder,
@@ -130,6 +131,7 @@ def write_structure(cdmp, ndmp, dmp_diff, eroge_root='.'):
         for b in dmp_diff['removed_brands']:
             cpath = os.path.join(eroge_root, cdmp[b]['name'])
             npath = os.path.join(eroge_root, '!Removed!', cdmp[b]['name'])
+            os.makedirs(os.path.dirname(npath), exist_ok=True)
             os.rename(cpath, npath)
             logger_module.info('Removed 「%s」', cdmp[b]['name'])
             changes[0][2].append(b)
@@ -153,8 +155,7 @@ def write_structure(cdmp, ndmp, dmp_diff, eroge_root='.'):
         logger_module.info('Brand Additions:')
         for b in dmp_diff['added_brands']:
             path = os.path.join(eroge_root, ndmp[b]['name'])
-            if not os.path.exists(path):
-                os.mkdir(path)
+            os.makedirs(path, exist_ok=True)
             open(os.path.join(path, b), 'w').close()
             changes[0][0].append(b)
             logger_module.info('Created 「%s」', ndmp[b]['name'])
@@ -166,6 +167,7 @@ def write_structure(cdmp, ndmp, dmp_diff, eroge_root='.'):
             for g in lg:
                 cpath = os.path.join(eroge_root, ndmp[b]['name'], cdmp[b]['g'][g]['name'])
                 npath = os.path.join(eroge_root, '!Removed!', ndmp[b]['name'], cdmp[b]['g'][g]['name'])
+                os.makedirs(os.path.dirname(npath), exist_ok=True)
                 os.rename(cpath, npath)
                 changes[1][2].append((b, g))
                 logger_module.info('Removed 「%s」の「%s」', ndmp[b]['name'], cdmp[b]['g'][g]['name'])
@@ -187,8 +189,7 @@ def write_structure(cdmp, ndmp, dmp_diff, eroge_root='.'):
         for b, lg in dmp_diff['added_games']:
             for g in lg:
                 path = os.path.join(eroge_root, ndmp[b]['name'], ndmp[b]['g'][g]['name'])
-                if not os.path.exists(path):
-                    os.mkdir(path)
+                os.makedirs(path, exist_ok=True)
                 open(os.path.join(path, g), 'w').close()
                 changes[1][0].append((b, g))
                 logger_module.info('Added 「%s」の「%s」', ndmp[b]["name"], ndmp[b]["g"][g]["name"])
