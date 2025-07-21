@@ -217,7 +217,7 @@ def write_structure(cdmp, ndmp, dmp_diff, eroge_root='.'):
                 logger_module.info('Added 「%s」の「%s」', bname, gname)
                 count[1][0] += 1
     s = 'Totals:' \
-       f'{count[0][0]} Brand Additions' \
+       f'\n{count[0][0]} Brand Additions' \
        f'\n{count[0][1]} Brand Changes' \
        f'\n{count[0][2]} Brand Removals' \
        f'\n{count[1][0]} Game Additions' \

@@ -67,5 +67,3 @@ def main():
             args.func(**command_args)
         except (ArgumentError, KeyError) as e:
             parser.print_help()
-
-main()
