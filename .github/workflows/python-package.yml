@@ -37,4 +37,4 @@ jobs:
       with:
         make_latest: true
         files: |
-          dist/anime_manager-*.*.*-py3-none-any.whl
+          dist/eroge_manager-*.*.*-py3-none-any.whl
