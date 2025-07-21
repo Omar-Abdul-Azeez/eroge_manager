@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='eroge_manager',
-    version='1.0.0',
+    version='1.0.1',
     packages=['eroge'],
     url='https://github.com/Omar-Abdul-Azeez/eroge_manager',
     install_requires=[

@@ -44,7 +44,7 @@ def main():
     library.add_argument('dump_root', help='Dumps directory.', metavar='DIR')
     library.add_argument('-u', '--user', action='store', dest='user', help='Username on EroGameScape.')
     library.add_argument('-o', '--offline', action='store_true', dest='offline', help='Use latest existing dump in dump_root.', default=False)
-    library.add_argument('-n', '--nodump', action='store_false', dest='dumap', help='Create a file copy of EroGameScape\'s account\'s data in dump_root. (Requires --user)', default=True)
+    library.add_argument('-n', '--nodump', action='store_false', dest='dump', help='Create a file copy of EroGameScape\'s account\'s data in dump_root. (Requires --user)', default=True)
 
     if len(argv) == 1:
         # parser.print_help()
