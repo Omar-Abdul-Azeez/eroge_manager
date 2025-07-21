@@ -37,7 +37,7 @@ logger.addHandler(handler_stderr)
 
 def main():
     parser = ArgumentParser(exit_on_error=False)
-    subparsers = parser.add_subparsers(help='Eroge library manager. Helps keep library in a uniform structure. Structure used: [brand]\\[game]')
+    subparsers = parser.add_subparsers(help='Eroge library manager. Helps keep library in a uniform structure. Structure used: ([brand-id] )?[brand]\\([game-id] )?[game]')
     library = subparsers.add_parser('library', help='Library mode, syncs library to with an EroGameScape account.')
     library.set_defaults(func=sync_backlog)
     library.add_argument('eroge_root', help='Library directory.', metavar='DIR')
@@ -56,7 +56,7 @@ def main():
                 command_args = vars(args).copy()
                 del command_args['func']
                 args.func(**command_args)
-            except ArgumentError as e:
+            except (ArgumentError, KeyError) as e:
                 parser.print_help()
             inp = input('>')
     else:
@@ -65,5 +65,7 @@ def main():
             command_args = vars(args).copy()
             del command_args['func']
             args.func(**command_args)
-        except ArgumentError as e:
+        except (ArgumentError, KeyError) as e:
             parser.print_help()
+
+main()
