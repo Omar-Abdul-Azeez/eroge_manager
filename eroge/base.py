@@ -217,14 +217,14 @@ def diff(cdmp, ndmp):
            'changed_games': []}
     res['added_games'] = [(b, set(ndmp[b]['g'])) for b in res['added_brands']]
     for b in mut:
-        if cdmp[b]['name'] != ndmp[b]['name']:
+        if cdmp[b]['name'] != special_chars(ndmp[b]['name'], replace=True):
             res['changed_brands'].append(b)
         curg = set(cdmp[b]['g'])
         nwg = set(ndmp[b]['g'])
         mutg = curg.intersection(nwg)
         res['added_games'].append((b, nwg.difference(curg)))
         res['removed_games'].append((b, curg.difference(nwg)))
-        res['changed_games'].append((b, (g for g in mutg if cdmp[b]['g'][g]['name'] != ndmp[b]['g'][g]['name'])))
+        res['changed_games'].append((b, (g for g in mutg if cdmp[b]['g'][g]['name'] != special_chars(ndmp[b]['g'][g]['name'], replace=True))))
 
     return res
 
